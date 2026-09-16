@@ -1,0 +1,57 @@
+{
+  "name": "launchdock",
+  "private": true,
+  "overrides": {
+    "dompurify": "3.4.15"
+  },
+  "version": "1.0.0",
+  "description": "Private single-user website editor and deployment dashboard for GitHub and Cloudflare Pages",
+  "scripts": {
+    "dev": "concurrently -k -n api,web npm:dev:api npm:dev:web",
+    "dev:api": "wrangler dev --ip 127.0.0.1 --port 8787 --var LOCAL_DEV:true",
+    "dev:web": "vite --host 127.0.0.1",
+    "types": "wrangler types",
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "test": "vitest run",
+    "test:browser": "playwright test",
+    "db:local": "wrangler d1 migrations apply launchdock --local",
+    "db:remote": "wrangler d1 migrations apply launchdock --remote",
+    "deploy:check": "node scripts/preflight.mjs",
+    "deploy": "npm run deploy:check && npm run typecheck && npm run build && wrangler deploy",
+    "check": "npm run typecheck && npm test && npm run build",
+    "format": "prettier --write src worker shared tests scripts docs README.md",
+    "dev:init": "node scripts/local-init.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
+    "fflate": "^0.8.3",
+    "idb-keyval": "^6.3.0",
+    "jose": "^6.2.12",
+    "lucide-react": "^1.45.0",
+    "monaco-editor": "^0.56.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "tldts": "^7.4.12",
+    "zod": "^4.6.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260911.1",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^22.20.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "jsonc-parser": "^3.3.1",
+    "prettier": "^3.9.7",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.131.1"
+  }
+}
