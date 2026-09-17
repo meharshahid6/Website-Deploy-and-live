@@ -6,6 +6,10 @@ A private, single-user React + TypeScript deployment workspace. Import files loc
 
 ## Start locally
 
+**Windows shortcut:** double-click **LaunchDock.cmd** in this folder. It builds the dashboard, applies local database migrations, starts the backend in the background and opens your browser at http://127.0.0.1:5173. You do not need an Administrator terminal or repeated npm commands. Node.js and installed dependencies are required. Leave the local server on this computer; it is not an online deployment.
+
+The application is **LaunchDock**; this `Website Deploy and live` folder is its source. `Open LaunchDock.html` links to the running dashboard; HTML alone cannot start the backend. For one-time OAuth setup, double-click **Setup GitHub.cmd**. Both launchers select the correct folder automatically, even when started from another directory.
+
 Install Node.js 24 LTS and Git. Open a terminal in this folder, then run:
 
 ```sh

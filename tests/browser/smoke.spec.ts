@@ -8,7 +8,7 @@ test("dashboard, import, Monaco, local preview, draft recovery and connections",
   const external: string[] = [];
   page.on("request", (r) => {
     if (
-      !r.url().startsWith("http://127.0.0.1:8787") &&
+      !r.url().startsWith("http://127.0.0.1:8790") &&
       !r.url().startsWith("data:") &&
       !r.url().startsWith("blob:")
     )
@@ -35,7 +35,8 @@ test("dashboard, import, Monaco, local preview, draft recovery and connections",
   await page.getByRole("button", { name: "Open in editor" }).click();
   await expect(
     page.getByRole("button", { name: "Publish to GitHub", exact: true }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 30000 });
+  await expect(page.locator(".file-tree")).toContainText("index.html");
   await expect(page.locator(".monaco-editor").first()).toBeVisible({
     timeout: 30000,
   });
@@ -114,7 +115,7 @@ test("API fails safely for invalid and cross-origin requests", async ({
   expect(
     (
       await request.post("/api/projects", {
-        headers: { Origin: "http://127.0.0.1:8787", "X-LaunchDock": "1" },
+        headers: { Origin: "http://127.0.0.1:8790", "X-LaunchDock": "1" },
         data: { name: "../invalid" },
       })
     ).status(),

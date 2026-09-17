@@ -23,7 +23,12 @@ import {
 } from "./store";
 import { encrypt, decrypt, hash } from "./crypto";
 import { createRepository, pushInitial, commitTree } from "./github";
-import { verifyCloudflare, createPages, type CFDeployment } from "./cloudflare";
+import {
+  verifyCloudflare,
+  createPages,
+  ensureInitialDeployment,
+  type CFDeployment,
+} from "./cloudflare";
 import { domainAction, domainInput, hostDomains } from "./domains";
 import type { AppEnv } from "./env";
 import type { Project } from "../shared/model";
@@ -642,11 +647,19 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
           "ACCOUNT_CHANGED",
           "Select the original Cloudflare account.",
         );
-      if (p.cloudflare_project_name)
+      if (p.cloudflare_project_name) {
+        await ensureInitialDeployment(
+          c.token,
+          c.provider_account_id,
+          p.cloudflare_project_name,
+          p.production_branch,
+          () => reserveBuild(e, p.id).then(() => {}),
+        );
         return json({
           project: p.cloudflare_project_name,
           status: p.project_status,
         });
+      }
       await reserveBuild(e, p.id);
       const created = await createPages(
         c.token,
@@ -666,6 +679,12 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
           p.id,
         )
         .run();
+      await ensureInitialDeployment(
+        c.token,
+        c.provider_account_id,
+        created.name,
+        p.production_branch,
+      );
       return json({
         project: created.name,
         productionUrl: `https://${created.subdomain}`,

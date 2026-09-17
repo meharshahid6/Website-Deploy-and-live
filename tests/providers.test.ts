@@ -1,7 +1,45 @@
 import { afterEach, it, expect, vi } from "vitest";
 import { createRepository, commitTree, pushInitial } from "../worker/github";
-import { verifyCloudflare, createPages } from "../worker/cloudflare";
+import {
+  verifyCloudflare,
+  createPages,
+  ensureInitialDeployment,
+} from "../worker/cloudflare";
 import type { Project } from "../shared/model";
+import { provider } from "../worker/http";
+it("uses Worker-compatible manual redirects and never forwards credentials", async () => {
+  const mock = vi.fn().mockResolvedValue(
+    new Response(null, {
+      status: 302,
+      headers: { Location: "https://untrusted.example" },
+    }),
+  );
+  vi.stubGlobal("fetch", mock);
+  await expect(
+    provider(
+      "https://api.cloudflare.com/client/v4/user/tokens/verify",
+      "secret",
+    ),
+  ).rejects.toMatchObject({ code: "PROVIDER_REDIRECT" });
+  expect(mock).toHaveBeenCalledTimes(1);
+  expect(mock.mock.calls[0][1].redirect).toBe("manual");
+});
+it("reports network and invalid response failures without leaking provider details", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockRejectedValue(new Error("sensitive provider detail")),
+  );
+  await expect(
+    provider("https://api.github.com/user", "secret"),
+  ).rejects.toMatchObject({ code: "PROVIDER_NETWORK" });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue(new Response("invalid json")),
+  );
+  await expect(
+    provider("https://api.github.com/user", "secret"),
+  ).rejects.toMatchObject({ code: "PROVIDER_RESPONSE" });
+});
 const h = "a".repeat(40),
   t = "b".repeat(40),
   c = "c".repeat(40);
@@ -117,6 +155,30 @@ const project = {
   root_directory: "web",
   output_directory: "dist",
 } as Project;
+it("starts the first Git build using multipart data when project creation did not queue one", async () => {
+  const mock = vi
+    .fn()
+    .mockResolvedValueOnce(reply({ success: true, result: [] }))
+    .mockResolvedValueOnce(
+      reply({ success: true, result: { id: "deployment" } }),
+    );
+  vi.stubGlobal("fetch", mock);
+  const reserve = vi.fn();
+  await ensureInitialDeployment("token", "account", "site", "main", reserve);
+  expect(reserve).toHaveBeenCalledOnce();
+  expect(mock.mock.calls[1][1].body.get("branch")).toBe("main");
+  expect(mock.mock.calls[1][1].headers).not.toHaveProperty("Content-Type");
+});
+it("does not start another build when a deployment already exists", async () => {
+  const mock = vi
+    .fn()
+    .mockResolvedValue(reply({ success: true, result: [{ id: "existing" }] }));
+  vi.stubGlobal("fetch", mock);
+  const reserve = vi.fn();
+  await ensureInitialDeployment("token", "account", "site", "main", reserve);
+  expect(mock).toHaveBeenCalledTimes(1);
+  expect(reserve).not.toHaveBeenCalled();
+});
 it("creates Pages with the correct Git source and build config", async () => {
   const mock = vi
     .fn()
@@ -140,18 +202,16 @@ it("creates Pages with the correct Git source and build config", async () => {
   });
 });
 it("never adopts a conflicting Pages project", async () => {
-  const mock = vi
-    .fn()
-    .mockResolvedValue(
-      reply({
-        success: true,
-        result: {
-          id: "p",
-          name: "site",
-          source: { config: { repo_id: "different" } },
-        },
-      }),
-    );
+  const mock = vi.fn().mockResolvedValue(
+    reply({
+      success: true,
+      result: {
+        id: "p",
+        name: "site",
+        source: { config: { repo_id: "different" } },
+      },
+    }),
+  );
   vi.stubGlobal("fetch", mock);
   await expect(createPages("token", "a", project, "7")).rejects.toMatchObject({
     code: "PAGES_EXISTS",

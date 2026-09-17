@@ -7,7 +7,7 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:8787",
+    baseURL: "http://127.0.0.1:8790",
     headless: true,
     channel: "chrome",
     trace: "retain-on-failure",
@@ -31,8 +31,8 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      "npx wrangler d1 migrations apply launchdock --local --persist-to .wrangler/browser-state && npx wrangler dev --ip 127.0.0.1 --port 8787 --persist-to .wrangler/browser-state --var LOCAL_DEV:true --var APP_ORIGIN:http://127.0.0.1:8787",
-    url: "http://127.0.0.1:8787/api/health",
+      "npx wrangler d1 migrations apply launchdock --local --persist-to .wrangler/browser-state && npx wrangler dev --env-file tests/browser.env --ip 127.0.0.1 --port 8790 --persist-to .wrangler/browser-state --var LOCAL_DEV:true --var APP_ORIGIN:http://127.0.0.1:8790",
+    url: "http://127.0.0.1:8790/api/health",
     reuseExistingServer: false,
     timeout: 60000,
     env: {

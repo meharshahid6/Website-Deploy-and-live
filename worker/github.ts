@@ -47,7 +47,7 @@ export async function pushInitial(
   };
   const advertisement = await fetch(
     `https://github.com/${repo}.git/info/refs?service=git-receive-pack`,
-    { headers: auth, redirect: "error", signal: AbortSignal.timeout(25000) },
+    { headers: auth, redirect: "manual", signal: AbortSignal.timeout(25000) },
   );
   if (!advertisement.ok) {
     await advertisement.body?.cancel();
@@ -74,7 +74,7 @@ export async function pushInitial(
       "User-Agent": "LaunchDock",
     },
     body: pack.body,
-    redirect: "error",
+    redirect: "manual",
     signal: AbortSignal.timeout(60000),
   });
   const result = await r.text();

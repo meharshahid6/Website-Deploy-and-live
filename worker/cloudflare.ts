@@ -24,6 +24,21 @@ export async function verifyCloudflare(token: string) {
     throw new AppError(400, "TOKEN_INACTIVE", "Cloudflare token is not active");
   return cf<{ id: string; name: string }[]>(token, "/accounts?per_page=50");
 }
+export async function ensureInitialDeployment(
+  token: string,
+  account: string,
+  name: string,
+  branch: string,
+  beforeStart?: () => Promise<void>,
+) {
+  const path = `/accounts/${account}/pages/projects/${name}/deployments`;
+  const deployments = await cf<CFDeployment[]>(token, path + "?per_page=1");
+  if (deployments.length) return;
+  await beforeStart?.();
+  const body = new FormData();
+  body.set("branch", branch);
+  await cf(token, path, "POST", body);
+}
 export async function createPages(
   token: string,
   account: string,

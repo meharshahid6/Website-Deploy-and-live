@@ -13,19 +13,43 @@ export async function provider<T>(
   method = "GET",
   body?: unknown,
 ): Promise<T> {
-  const r = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      "User-Agent": "LaunchDock",
-      "X-GitHub-Api-Version": "2026-03-10",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(25000),
-    redirect: "error",
-  });
+  let r: Response;
+  try {
+    r = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json",
+        ...(body instanceof FormData
+          ? {}
+          : { "Content-Type": "application/json" }),
+        "User-Agent": "LaunchDock",
+        "X-GitHub-Api-Version": "2026-03-10",
+      },
+      body:
+        body instanceof FormData
+          ? body
+          : body === undefined
+            ? undefined
+            : JSON.stringify(body),
+      signal: AbortSignal.timeout(25000),
+      redirect: "manual",
+    });
+  } catch {
+    throw new AppError(
+      502,
+      "PROVIDER_NETWORK",
+      "The server could not reach the provider. Check the computer's internet connection, VPN, proxy and firewall, then retry.",
+    );
+  }
+  if (r.status >= 300 && r.status < 400) {
+    await r.body?.cancel();
+    throw new AppError(
+      502,
+      "PROVIDER_REDIRECT",
+      "The provider returned an unexpected redirect. No credentials were forwarded. Check the provider endpoint.",
+    );
+  }
   if (!r.ok) {
     await r.body?.cancel();
     throw new AppError(
@@ -43,7 +67,15 @@ export async function provider<T>(
     );
   }
   if (r.status === 204) return undefined as T;
-  return r.json() as Promise<T>;
+  try {
+    return (await r.json()) as T;
+  } catch {
+    throw new AppError(
+      502,
+      "PROVIDER_RESPONSE",
+      "The provider returned an unreadable response. Try again later.",
+    );
+  }
 }
 export const gh = <T>(
   token: string,
