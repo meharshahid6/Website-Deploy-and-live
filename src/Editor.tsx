@@ -337,15 +337,19 @@ export default function Editor({
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  const filtered = files
-    .filter(
-      (f) =>
-        !search ||
-        f.path.toLowerCase().includes(search.toLowerCase()) ||
-        (f.encoding === "utf-8" &&
-          f.content.toLowerCase().includes(search.toLowerCase())),
-    )
-    .sort((a, b) => a.path.localeCompare(b.path));
+  const filtered = useMemo(
+    () =>
+      files
+        .filter(
+          (f) =>
+            !search ||
+            f.path.toLowerCase().includes(search.toLowerCase()) ||
+            (f.encoding === "utf-8" &&
+              f.content.toLowerCase().includes(search.toLowerCase())),
+        )
+        .sort((a, b) => a.path.localeCompare(b.path)),
+    [files, search],
+  );
   return (
     <>
       <div className="page-heading editor-heading">
@@ -456,13 +460,19 @@ export default function Editor({
               </button>
               <button
                 aria-label="Delete file"
+                title="Delete file"
                 disabled={!!busy}
                 onClick={() => {
-                  if (
-                    selected &&
-                    confirm("Delete " + active + " from this draft?")
-                  )
-                    mutate(() => files.filter((f) => f.path !== active));
+                  if (!selected) return;
+                  if (files.length <= 1) {
+                    onError("A project must contain at least one file.");
+                    return;
+                  }
+                  if (confirm("Delete " + active + " from this draft?")) {
+                    const remaining = files.filter((f) => f.path !== active);
+                    mutate(() => remaining);
+                    setActive(remaining[0]?.path ?? "");
+                  }
                 }}
               >
                 <Trash2 size={15} />

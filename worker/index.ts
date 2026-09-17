@@ -208,7 +208,7 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
     try {
       const value = r.headers
         .get("Cookie")
-        ?.split("; ")
+        ?.split(/;\s*/)
         .find((c) => c.startsWith("ld_oauth="))
         ?.slice(9);
       if (!value)
@@ -385,6 +385,19 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
   const p = await project(e, m[1]),
     action = m[2] ?? "";
   if (!action && method === "GET") return json(p);
+  if (!action && method === "DELETE") {
+    z.object({ confirm: z.literal(true) })
+      .strict()
+      .parse(await jsonBody(r));
+    await e.DB.prepare("DELETE FROM deployments WHERE project_id=?")
+      .bind(p.id)
+      .run();
+    await e.DB.prepare("DELETE FROM activity_logs WHERE project_id=?")
+      .bind(p.id)
+      .run();
+    await e.DB.prepare("DELETE FROM projects WHERE id=?").bind(p.id).run();
+    return json({ deleted: true });
+  }
   if (action === "files" && method === "GET") {
     const c = await connection(e, "github");
     if (!p.repository_id) return json({ files: [], head: null });

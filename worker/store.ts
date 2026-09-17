@@ -76,7 +76,7 @@ export async function lock<T>(e: AppEnv, id: string, fn: () => Promise<T>) {
   const result = await e.DB.prepare(
     "UPDATE projects SET lock_until=? WHERE id=? AND lock_until<?",
   )
-    .bind(now + 180000, id, now)
+    .bind(now + 60000, id, now)
     .run();
   if (!result.meta.changes)
     throw new AppError(

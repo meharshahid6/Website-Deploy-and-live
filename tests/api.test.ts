@@ -416,6 +416,11 @@ function domainFetch(records: unknown[] = []) {
       return Response.json({ success: true, result: [zone] });
     if (url.includes("/dns_records?"))
       return Response.json({ success: true, result: records });
+    if (url.includes("/pages/projects/"))
+      return Response.json({
+        success: true,
+        result: { subdomain: "project-1.pages.dev" },
+      });
     if (url.endsWith("/domains/example.com"))
       return Response.json({ success: false }, { status: 404 });
     throw new Error("Unexpected mutation: " + init?.method);
@@ -496,8 +501,14 @@ it("requires the deployment stage to succeed before marking a site live", async 
   let stage = { name: "build", status: "success" };
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      Response.json({
+    vi.fn(async (url: string) => {
+      if (url.includes("/pages/projects/") && !url.includes("/deployments")) {
+        return Response.json({
+          success: true,
+          result: { subdomain: "preview.pages.dev" },
+        });
+      }
+      return Response.json({
         success: true,
         result: [
           {
@@ -509,8 +520,8 @@ it("requires the deployment stage to succeed before marking a site live", async 
             latest_stage: stage,
           },
         ],
-      }),
-    ),
+      });
+    }),
   );
   const path = `/api/projects/${id}/deployments?refresh=1`;
   expect(

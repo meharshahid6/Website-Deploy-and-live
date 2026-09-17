@@ -2,8 +2,10 @@ import {
   useState,
   useEffect,
   useRef,
+  useCallback,
   lazy,
   Suspense,
+  Component,
   type ReactNode,
 } from "react";
 import {
@@ -30,6 +32,8 @@ import {
   Copy,
   Menu,
   X,
+  Trash2,
+  CheckCircle2,
 } from "lucide-react";
 import { api } from "./api";
 import { importFiles, importZip, starter, type ImportReport } from "./import";
@@ -40,8 +44,68 @@ import type {
   Deployment,
   SourceFile,
 } from "../shared/model";
-import { set } from "idb-keyval";
+import { set, del } from "idb-keyval";
 const Editor = lazy(() => import("./Editor"));
+class ErrorBoundary extends Component<
+  { children: ReactNode },
+  { error: Error | null }
+> {
+  state: { error: Error | null } = { error: null };
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    if (this.state.error)
+      return (
+        <div className="empty">
+          <AlertCircle size={40} />
+          <h2>Something went wrong</h2>
+          <p>{this.state.error.message}</p>
+          <Button
+            primary
+            onClick={() => {
+              this.setState({ error: null });
+              location.hash = "dashboard";
+            }}
+          >
+            Return to dashboard
+          </Button>
+        </div>
+      );
+    return this.props.children;
+  }
+}
+interface Toast {
+  id: number;
+  message: string;
+  type: "success" | "error";
+}
+let toastId = 0;
+function Toasts({
+  items,
+  onDismiss,
+}: {
+  items: Toast[];
+  onDismiss: (id: number) => void;
+}) {
+  return (
+    <div className="toast-container">
+      {items.map((t) => (
+        <div key={t.id} className={"toast " + t.type}>
+          {t.type === "success" ? (
+            <CheckCircle2 size={16} />
+          ) : (
+            <AlertCircle size={16} />
+          )}
+          <span>{t.message}</span>
+          <button aria-label="Dismiss" onClick={() => onDismiss(t.id)}>
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 export function Button({
   children,
   onClick,
@@ -126,7 +190,17 @@ export default function App() {
     [error, setError] = useState(""),
     [loading, setLoading] = useState(true),
     [mobile, setMobile] = useState(false),
-    [local, setLocal] = useState(false);
+    [local, setLocal] = useState(false),
+    [toasts, setToasts] = useState<Toast[]>([]);
+  const toast = useCallback((message: string, type: "success" | "error" = "success") => {
+    const id = ++toastId;
+    setToasts((t) => [...t, { id, message, type }]);
+    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 4000);
+  }, []);
+  const dismissToast = useCallback(
+    (id: number) => setToasts((t) => t.filter((x) => x.id !== id)),
+    [],
+  );
   async function refresh() {
     try {
       const [p, c, u] = await Promise.all([
@@ -173,8 +247,28 @@ export default function App() {
     }
   };
   const navigateProject = (p: Project, v = "editor") => go(v, p);
+  const deleteProject = async (p: Project) => {
+    if (
+      !confirm(
+        `Delete project "${p.name}"? This removes it from LaunchDock only. Your GitHub repository and Cloudflare Pages project will remain.`,
+      )
+    )
+      return;
+    try {
+      await api("/projects/" + p.id, "DELETE", { confirm: true });
+      await del("draft:" + p.id);
+      if (selected?.id === p.id) setSelected(null);
+      toast(`Project "${p.name}" deleted`);
+      await refresh();
+      go("dashboard");
+    } catch (e) {
+      toast((e as Error).message, "error");
+    }
+  };
   return (
+    <ErrorBoundary>
     <div className="app">
+      <Toasts items={toasts} onDismiss={dismissToast} />
       <aside className={mobile ? "sidebar open" : "sidebar"}>
         <a className="brand" href="#dashboard">
           <span className="brand-icon">
@@ -336,7 +430,7 @@ export default function App() {
                       <div className="meter">
                         <i
                           style={{
-                            width: Math.min(100, usage.initiated / 5) + "%",
+                            width: Math.min(100, (usage.initiated / usage.limit) * 100) + "%",
                           }}
                         />
                       </div>
@@ -435,6 +529,13 @@ export default function App() {
                               Deploy
                               <ArrowUpRight size={14} />
                             </Button>
+                            <button
+                              className="card-delete"
+                              aria-label={"Delete " + p.name}
+                              onClick={() => void deleteProject(p)}
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                           <div className="row links">
                             <Link
@@ -596,6 +697,7 @@ export default function App() {
         </main>
       </div>
     </div>
+    </ErrorBoundary>
   );
 }
 function Wizard({
