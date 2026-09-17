@@ -22,6 +22,7 @@ import {
   ChevronUp,
   ChevronDown,
   X,
+  Loader2,
 } from "lucide-react";
 import { api } from "./api";
 import { Button, Field, Badge } from "./App";
@@ -451,9 +452,16 @@ export default function Editor({
           </Button>
         </div>
       </div>
+      {!ready && (
+        <div className="action-loading-banner" role="status">
+          <Loader2 size={16} className="spin-btn" />
+          <span>Loading project files into workspace…</span>
+        </div>
+      )}
       {busy && (
-        <div className="alert" role="status">
-          {busy}
+        <div className="action-loading-banner" role="status">
+          <Loader2 size={16} className="spin-btn" />
+          <span>{busy}</span>
         </div>
       )}
       <div className="editor-layout">
@@ -768,6 +776,7 @@ export default function Editor({
             </Button>
             <Button
               primary
+              loading={!!busy}
               disabled={!!busy || !ready || !changed.length}
               onClick={() => {
                 setMode("diff");

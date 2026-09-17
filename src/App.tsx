@@ -27,6 +27,8 @@ import {
   FileArchive,
   Folder,
   FileCode2,
+  Code2,
+  Loader2,
   Check,
   AlertCircle,
   Copy,
@@ -111,22 +113,29 @@ export function Button({
   onClick,
   primary = false,
   disabled = false,
+  loading = false,
   ...rest
 }: {
   children: ReactNode;
   onClick?: () => void;
   primary?: boolean;
   disabled?: boolean;
+  loading?: boolean;
   "aria-label"?: string;
   title?: string;
 }) {
   return (
     <button
-      className={primary ? "button primary" : "button"}
-      disabled={disabled}
+      className={
+        primary
+          ? `button primary ${loading ? "loading" : ""}`
+          : `button ${loading ? "loading" : ""}`
+      }
+      disabled={disabled || loading}
       onClick={onClick}
       {...rest}
     >
+      {loading && <Loader2 size={13} className="spin-btn" />}
       {children}
     </button>
   );
@@ -247,6 +256,7 @@ export default function App() {
       setError((e as Error).message);
     }
   };
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const navigateProject = (p: Project, v = "editor") => go(v, p);
   const deleteProject = async (p: Project) => {
     const hasRepo = p.repository_owner && p.repository_name;
@@ -263,6 +273,7 @@ export default function App() {
     msg += "\n\nAre you sure? This cannot be undone.";
     if (!confirm(msg)) return;
     try {
+      setDeletingId(p.id);
       toast(`Deleting "${p.name}" and removing provider resources...`);
       const res = await api<{
         deleted: boolean;
@@ -294,6 +305,8 @@ export default function App() {
       go("dashboard");
     } catch (e) {
       toast((e as Error).message, "error");
+    } finally {
+      setDeletingId(null);
     }
   };
   return (
@@ -376,19 +389,77 @@ export default function App() {
           >
             {mobile ? <X /> : <Menu />}
           </button>
-          <span>Workspace</span>
-          <ChevronRight size={14} />
-          <strong>
-            {view === "editor"
-              ? (selected?.name ?? "Editor")
-              : view === "new"
+          <button
+            type="button"
+            className="breadcrumb-btn"
+            onClick={() => go("dashboard")}
+          >
+            <LayoutDashboard size={14} />
+            <span>Workspace</span>
+          </button>
+          <ChevronRight size={13} className="breadcrumb-sep" />
+          {selected &&
+          ["editor", "deployments", "domain"].includes(view) ? (
+            <>
+              <button
+                type="button"
+                className="breadcrumb-btn"
+                onClick={() => go("editor", selected)}
+              >
+                <strong>{selected.name}</strong>
+              </button>
+              <ChevronRight size={13} className="breadcrumb-sep" />
+              <div className="top-project-nav">
+                <button
+                  type="button"
+                  className={`top-nav-btn ${view === "editor" ? "active" : ""}`}
+                  onClick={() => go("editor", selected)}
+                >
+                  <Code2 size={13} />
+                  Code
+                </button>
+                <button
+                  type="button"
+                  className={`top-nav-btn ${view === "deployments" ? "active" : ""}`}
+                  onClick={() => go("deployments", selected)}
+                >
+                  <Rocket size={13} />
+                  Deploy
+                </button>
+                <button
+                  type="button"
+                  className={`top-nav-btn ${view === "domain" ? "active" : ""}`}
+                  onClick={() => go("domain", selected)}
+                >
+                  <Globe size={13} />
+                  Domain
+                </button>
+              </div>
+              {selected.latest_production_url && (
+                <a
+                  href={selected.latest_production_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="live-chip"
+                  title="Open live website"
+                >
+                  <span className="pulse-dot" />
+                  Live Site
+                  <ExternalLink size={11} />
+                </a>
+              )}
+            </>
+          ) : (
+            <strong>
+              {view === "new"
                 ? "New project"
-                : view === "domain"
-                  ? "Custom domain"
-                  : view === "deployments"
-                    ? "Deployment details"
+                : view === "projects"
+                  ? "All Projects"
+                  : view === "connections"
+                    ? "Connections"
                     : view[0]?.toUpperCase() + view.slice(1)}
-          </strong>
+            </strong>
+          )}
           <span className="top-status">
             <span className="online-dot" />
             {local ? "Local development" : "Private dashboard"}
@@ -561,11 +632,16 @@ export default function App() {
                               <ArrowUpRight size={14} />
                             </Button>
                             <button
-                              className="card-delete"
+                              className={`card-delete ${deletingId === p.id ? "loading" : ""}`}
                               aria-label={"Delete " + p.name}
+                              disabled={deletingId === p.id}
                               onClick={() => void deleteProject(p)}
                             >
-                              <Trash2 size={14} />
+                              {deletingId === p.id ? (
+                                <Loader2 size={14} className="spin-btn" />
+                              ) : (
+                                <Trash2 size={14} />
+                              )}
                             </button>
                           </div>
                           <div className="row links">
@@ -813,6 +889,12 @@ function Wizard({
             500 files · 2 MiB per file · 8 MiB total. Dependencies and secrets
             are filtered.
           </p>
+          {busy && (
+            <div className="action-loading-banner">
+              <Loader2 size={16} className="spin-btn" />
+              <span>Analyzing and validating your files locally…</span>
+            </div>
+          )}
           <div className="upload-grid">
             {[
               {
@@ -985,10 +1067,11 @@ function Wizard({
             <Button onClick={() => setStep(1)}>Back</Button>
             <Button
               primary
+              loading={busy}
               disabled={busy || !name}
               onClick={() => void create()}
             >
-              {busy ? "Creating…" : "Open in editor"}
+              Open in editor
               <ChevronRight size={16} />
             </Button>
           </div>
@@ -1024,7 +1107,8 @@ function Connections({
   const [tokens, setTokens] = useState({ cloudflare: "", hostinger: "" }),
     [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]),
     [account, setAccount] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [verifying, setVerifying] = useState<string | null>(null);
   async function connect(provider: "cloudflare" | "hostinger") {
     setBusy(true);
     await run(async () => {
@@ -1251,14 +1335,11 @@ function Connections({
                   )}
                   <Button
                     primary
+                    loading={busy}
                     disabled={busy || !tokens[provider]}
                     onClick={() => void connect(provider)}
                   >
-                    {busy
-                      ? "Verifying…"
-                      : c
-                        ? "Replace token"
-                        : "Verify & connect"}
+                    {c ? "Replace token" : "Verify & connect"}
                   </Button>
                 </>
               )}
@@ -1275,13 +1356,20 @@ function Connections({
                     </Button>
                   )}
                   <Button
+                    loading={verifying === provider}
+                    disabled={verifying === provider}
                     onClick={() =>
                       void run(async () => {
-                        await api(
-                          "/connections/" + provider + "/verify",
-                          "POST",
-                          {},
-                        );
+                        setVerifying(provider);
+                        try {
+                          await api(
+                            "/connections/" + provider + "/verify",
+                            "POST",
+                            {},
+                          );
+                        } finally {
+                          setVerifying(null);
+                        }
                       })
                     }
                   >
@@ -1346,6 +1434,8 @@ function Deployments({
 }) {
   const [rows, setRows] = useState<Deployment[]>([]),
     [busy, setBusy] = useState(false),
+    [refreshing, setRefreshing] = useState(false),
+    [retryingId, setRetryingId] = useState<string | null>(null),
     [pollCycle, setPollCycle] = useState(0),
     [pollError, setPollError] = useState("");
   const retrying = useRef<string | null>(null);
@@ -1416,6 +1506,19 @@ function Deployments({
           Connect domain
         </Button>
       </div>
+      {rows[0] && ["deploying", "building", "queued"].includes(rows[0].status) && (
+        <div className="active-deploy-banner">
+          <div className="deploy-icon-wrap">
+            <Loader2 size={20} className="spin-btn" />
+          </div>
+          <div>
+            <strong>Deployment in progress on Cloudflare Pages</strong>
+            <p>
+              {rows[0].commit_message || "Active build"} · Branch: {rows[0].branch} · Status: <Badge status={rows[0].status} />
+            </p>
+          </div>
+        </div>
+      )}
       {pollError && <div className="alert error">{pollError}</div>}
       <div className="panel">
         <div className="row">
@@ -1457,16 +1560,24 @@ function Deployments({
           {!p.cloudflare_project_name && (
             <Button
               primary
+              loading={busy}
               disabled={busy || !p.last_commit_sha}
               onClick={() => void deploy()}
             >
-              {busy ? "Connecting…" : "Create Pages & deploy"}
+              Create Pages & deploy
             </Button>
           )}
           <Button
+            loading={refreshing}
+            disabled={refreshing}
             onClick={() =>
               void run(async () => {
-                await refresh();
+                setRefreshing(true);
+                try {
+                  await refresh();
+                } finally {
+                  setRefreshing(false);
+                }
               })
             }
           >
@@ -1523,6 +1634,8 @@ function Deployments({
               <Link url={d.production_url}>Open live website</Link>
               {["failed", "cancelled", "successful"].includes(d.status) && (
                 <Button
+                  loading={retryingId === d.id}
+                  disabled={retryingId === d.id}
                   onClick={() => {
                     if (
                       confirm(
@@ -1530,13 +1643,18 @@ function Deployments({
                       )
                     )
                       void run(async () => {
-                        await api("/projects/" + p.id + "/redeploy", "POST", {
-                          deploymentId: d.provider_deployment_id,
-                          confirm: true,
-                        });
-                        retrying.current = d.id;
-                        setPollCycle((n) => n + 1);
-                        await refresh();
+                        setRetryingId(d.id);
+                        try {
+                          await api("/projects/" + p.id + "/redeploy", "POST", {
+                            deploymentId: d.provider_deployment_id,
+                            confirm: true,
+                          });
+                          retrying.current = d.id;
+                          setPollCycle((n) => n + 1);
+                          await refresh();
+                        } finally {
+                          setRetryingId(null);
+                        }
                       });
                   }}
                 >
@@ -1577,6 +1695,7 @@ function DomainWizard({
     [reviewed, setReviewed] = useState(false),
     [owned, setOwned] = useState<string[]>([]),
     [busy, setBusy] = useState(false),
+    [loadingDomains, setLoadingDomains] = useState(false),
     [pollCycle, setPollCycle] = useState(0),
     [copied, setCopied] = useState("");
   const host = connections.some((c) => c.provider === "hostinger");
@@ -1611,21 +1730,34 @@ function DomainWizard({
           Keep Hostinger as your registrar. Let Cloudflare serve your website.
         </p>
       </div>
+      {busy && (
+        <div className="action-loading-banner">
+          <Loader2 size={16} className="spin-btn" />
+          <span>Communicating with provider APIs & checking DNS records…</span>
+        </div>
+      )}
       <div className="panel form-panel">
         <h2>1. Choose your domain</h2>
         {host && (
           <Button
+            loading={loadingDomains}
+            disabled={loadingDomains}
             onClick={() =>
               void run(async () => {
-                const r = await api<unknown>("/hostinger/domains");
-                const list = Array.isArray(r)
-                  ? r
-                  : ((r as { data?: unknown[] })?.data ?? []);
-                setOwned(
-                  list
-                    .map((x) => (x as { domain: string }).domain)
-                    .filter(Boolean),
-                );
+                setLoadingDomains(true);
+                try {
+                  const r = await api<unknown>("/hostinger/domains");
+                  const list = Array.isArray(r)
+                    ? r
+                    : ((r as { data?: unknown[] })?.data ?? []);
+                  setOwned(
+                    list
+                      .map((x) => (x as { domain: string }).domain)
+                      .filter(Boolean),
+                  );
+                } finally {
+                  setLoadingDomains(false);
+                }
               })
             }
           >
@@ -1662,6 +1794,7 @@ function DomainWizard({
         </Field>
         <Button
           primary
+          loading={busy}
           disabled={busy || !domain}
           onClick={() => void act("inspect")}
         >
@@ -1682,6 +1815,8 @@ function DomainWizard({
               <>
                 <p>No accessible zone exists in your selected account.</p>
                 <Button
+                  loading={busy}
+                  disabled={busy}
                   onClick={() => {
                     if (
                       confirm(
@@ -1771,6 +1906,7 @@ function DomainWizard({
                     {host && (
                       <Button
                         primary
+                        loading={busy}
                         disabled={!reviewed || busy}
                         onClick={() => {
                           if (
@@ -1837,6 +1973,7 @@ function DomainWizard({
                 <div className="form-actions">
                   <Button
                     primary
+                    loading={busy}
                     disabled={busy}
                     onClick={() => {
                       if (
@@ -1849,7 +1986,7 @@ function DomainWizard({
                   >
                     Attach to Pages
                   </Button>
-                  <Button disabled={busy} onClick={() => void act("inspect")}>
+                  <Button loading={busy} disabled={busy} onClick={() => void act("inspect")}>
                     Check again
                   </Button>
                   <Link url={state.liveUrl}>Open live website</Link>
