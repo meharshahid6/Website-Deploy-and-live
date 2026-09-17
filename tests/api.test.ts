@@ -547,3 +547,40 @@ it("enforces the local monthly build budget before a provider mutation", async (
   await expect(reserveBuild(env, id)).rejects.toMatchObject({ status: 429 });
   expect(fetch).not.toHaveBeenCalled();
 });
+it("deletes a project from the database and calls provider APIs", async () => {
+  const id = await connectedProject();
+  await saveConnection(env, "github", "gh_token", "owner", "1");
+  await saveConnection(env, "cloudflare", "cf_token", "cf_owner", "cf_acc");
+  db.prepare(
+    "UPDATE projects SET repository_owner='owner', repository_name='repo', cloudflare_project_name='pages-proj', cloudflare_account_id='cf_acc' WHERE id=?",
+  ).run(id);
+  const deletedUrls: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "DELETE") {
+        deletedUrls.push(url);
+        return new Response(null, { status: 204 });
+      }
+      return Response.json({ success: true });
+    }),
+  );
+  const res = await request(`/api/projects/${id}`, "DELETE", { confirm: true });
+  expect(res.status).toBe(200);
+  const data = (await res.json()) as {
+    data: { deleted: boolean; cloudflare: boolean; github: boolean };
+  };
+  expect(data.data).toMatchObject({
+    deleted: true,
+    cloudflare: true,
+    github: true,
+  });
+  expect(
+    db.prepare("SELECT * FROM projects WHERE id=?").get(id),
+  ).toBeUndefined();
+  expect(
+    deletedUrls.some((u) => u.includes("/pages/projects/pages-proj")),
+  ).toBe(true);
+  expect(deletedUrls.some((u) => u.includes("/repos/owner/repo"))).toBe(true);
+});
+

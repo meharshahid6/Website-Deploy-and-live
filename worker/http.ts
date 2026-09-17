@@ -95,11 +95,11 @@ export async function cf<T>(
     method,
     body,
   );
-  if (!r.success)
+  if (r && !r.success)
     throw new AppError(
       502,
       "CLOUDFLARE",
       "Cloudflare rejected the request. Verify permissions and GitHub installation.",
     );
-  return r.result;
+  return r ? r.result : (undefined as T);
 }

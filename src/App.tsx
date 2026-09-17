@@ -248,17 +248,34 @@ export default function App() {
   };
   const navigateProject = (p: Project, v = "editor") => go(v, p);
   const deleteProject = async (p: Project) => {
-    if (
-      !confirm(
-        `Delete project "${p.name}"? This removes it from LaunchDock only. Your GitHub repository and Cloudflare Pages project will remain.`,
-      )
-    )
-      return;
+    const hasRepo = p.repository_owner && p.repository_name;
+    const hasCF = p.cloudflare_project_name;
+    let msg = `Permanently delete "${p.name}"?`;
+    if (hasRepo || hasCF) {
+      msg += "\n\nThis will permanently delete:";
+      if (hasRepo)
+        msg += `\n• GitHub repository (${p.repository_owner}/${p.repository_name})`;
+      if (hasCF)
+        msg += `\n• Cloudflare Pages project (${p.cloudflare_project_name})`;
+      msg += "\n• LaunchDock project and deployment history";
+    }
+    msg += "\n\nAre you sure? This cannot be undone.";
+    if (!confirm(msg)) return;
     try {
-      await api("/projects/" + p.id, "DELETE", { confirm: true });
+      toast(`Deleting "${p.name}" and removing provider resources...`);
+      const res = await api<{
+        deleted: boolean;
+        cloudflare?: boolean;
+        github?: boolean;
+      }>("/projects/" + p.id, "DELETE", { confirm: true });
       await del("draft:" + p.id);
       if (selected?.id === p.id) setSelected(null);
-      toast(`Project "${p.name}" deleted`);
+      let doneMsg = `Project "${p.name}" deleted`;
+      if (res.github && res.cloudflare)
+        doneMsg += " (removed from GitHub & Cloudflare Pages)";
+      else if (res.github) doneMsg += " (removed from GitHub)";
+      else if (res.cloudflare) doneMsg += " (removed from Cloudflare Pages)";
+      toast(doneMsg);
       await refresh();
       go("dashboard");
     } catch (e) {

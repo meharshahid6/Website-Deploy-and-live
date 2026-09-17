@@ -389,6 +389,42 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
     z.object({ confirm: z.literal(true) })
       .strict()
       .parse(await jsonBody(r));
+
+    let cloudflareDeleted = false;
+    if (p.cloudflare_project_name) {
+      try {
+        const c = await connection(e, "cloudflare");
+        const accountId = p.cloudflare_account_id || c.provider_account_id;
+        await cf(
+          c.token,
+          `/accounts/${accountId}/pages/projects/${p.cloudflare_project_name}`,
+          "DELETE",
+        );
+        cloudflareDeleted = true;
+      } catch (err) {
+        if (err instanceof AppError && err.status === 404) {
+          cloudflareDeleted = true;
+        }
+      }
+    }
+
+    let githubDeleted = false;
+    if (p.repository_owner && p.repository_name) {
+      try {
+        const g = await connection(e, "github");
+        await gh(
+          g.token,
+          `/repos/${p.repository_owner}/${p.repository_name}`,
+          "DELETE",
+        );
+        githubDeleted = true;
+      } catch (err) {
+        if (err instanceof AppError && err.status === 404) {
+          githubDeleted = true;
+        }
+      }
+    }
+
     await e.DB.prepare("DELETE FROM deployments WHERE project_id=?")
       .bind(p.id)
       .run();
@@ -396,7 +432,11 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
       .bind(p.id)
       .run();
     await e.DB.prepare("DELETE FROM projects WHERE id=?").bind(p.id).run();
-    return json({ deleted: true });
+    return json({
+      deleted: true,
+      cloudflare: cloudflareDeleted,
+      github: githubDeleted,
+    });
   }
   if (action === "files" && method === "GET") {
     const c = await connection(e, "github");
@@ -805,7 +845,7 @@ export default {
     )
       secured.headers.set(
         "Content-Security-Policy",
-        "default-src 'none'; script-src 'unsafe-inline' data:; style-src 'unsafe-inline' data:; img-src data:; font-src data:; media-src data:; frame-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+        "default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' https: data: blob:; style-src 'unsafe-inline' https: data:; img-src https: data: blob:; font-src https: data:; media-src https: data: blob:; frame-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
       );
     if (["/preview", "/preview.html"].includes(new URL(r.url).pathname))
       secured.headers.delete("X-Frame-Options");
