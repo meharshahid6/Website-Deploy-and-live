@@ -1,8 +1,8 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "launchdock",
+  "name": "website-deploy-and-live",
   "main": "worker/index.ts",
-  "compatibility_date": "2026-09-13",
+  "compatibility_date": "2026-09-17",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "preview_urls": false,
@@ -19,7 +19,7 @@
     {
       "binding": "DB",
       "database_name": "launchdock",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "63de38bc-07c9-4024-8e05-68a0f88844eb",
       "migrations_dir": "migrations",
     },
   ],
