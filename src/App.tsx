@@ -1712,62 +1712,91 @@ function DomainWizard({
                       : "No records found."}
                   </pre>
                 </details>
-                <div className="alert">
-                  Changing nameservers affects the whole domain, including email
-                  and other subdomains. Copy existing DNS records into
-                  Cloudflare first. Check DNSSEC with your registrar before
-                  switching.
-                </div>
-                <label className="check">
-                  <input
-                    type="checkbox"
-                    checked={reviewed}
-                    onChange={(e) => setReviewed(e.target.checked)}
-                  />
-                  I reviewed all existing DNS and mail records and the DNSSEC
-                  setting.
-                </label>
-                {host && (
-                  <Button
-                    disabled={!reviewed || busy}
-                    onClick={() => {
-                      if (
-                        confirm(
-                          `Replace Hostinger nameservers for ${state.apex}\nFROM: ${state.previous.join(", ")}\nTO: ${state.nameservers.join(", ")}?`,
-                        )
-                      )
-                        void act("nameservers");
+                {state.delegationActive ? (
+                  <div
+                    className="alert"
+                    style={{
+                      borderColor: "#22c55e",
+                      background: "rgba(34, 197, 94, 0.1)",
+                      color: "#86efac",
                     }}
                   >
-                    Update through Hostinger API
-                  </Button>
+                    <CheckCircle2 size={18} />
+                    <span>
+                      Nameserver delegation is active! Your domain is routed
+                      through Cloudflare.
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="alert">
+                      Changing nameservers affects the whole domain, including email
+                      and other subdomains. Copy existing DNS records into
+                      Cloudflare first. Check DNSSEC with your registrar before
+                      switching.
+                    </div>
+                    <label className="check">
+                      <input
+                        type="checkbox"
+                        checked={reviewed}
+                        onChange={(e) => setReviewed(e.target.checked)}
+                      />
+                      I reviewed all existing DNS and mail records and the DNSSEC
+                      setting.
+                    </label>
+                    {host && (
+                      <Button
+                        primary
+                        disabled={!reviewed || busy}
+                        onClick={() => {
+                          if (
+                            confirm(
+                              `Replace Hostinger nameservers for ${state.apex}\nFROM: ${state.previous.join(", ")}\nTO: ${state.nameservers.join(", ")}?`,
+                            )
+                          )
+                            void act("nameservers");
+                        }}
+                      >
+                        Update through Hostinger API
+                      </Button>
+                    )}
+                    <details className="manual-guide" style={{ marginTop: "14px" }}>
+                      <summary
+                        style={{
+                          cursor: "pointer",
+                          color: "var(--muted)",
+                          fontSize: "12px",
+                          marginBottom: "10px",
+                        }}
+                      >
+                        Manual option (one-time setup)
+                      </summary>
+                      <ol>
+                        <li>
+                          Open Hostinger hPanel → Domains → Domain portfolio →
+                          Manage your apex domain.
+                        </li>
+                        <li>Open DNS / Nameservers → Change nameservers.</li>
+                        <li>
+                          Choose custom nameservers and enter both Cloudflare values
+                          shown above.
+                        </li>
+                        <li>
+                          Save in Hostinger, then return here. Leave existing
+                          records intact in Cloudflare.
+                        </li>
+                      </ol>
+                      <Link url="https://hpanel.hostinger.com/domains">
+                        Open Hostinger
+                      </Link>
+                      <p className="muted">
+                        Use this option if API access is unavailable. Delegation is
+                        checked against public DNS every 30 seconds while this
+                        wizard is open.
+                      </p>
+                    </details>
+                  </>
                 )}
-                <div className="manual-guide">
-                  <h3>Manual option — one-time setup</h3>
-                  <ol>
-                    <li>
-                      Open Hostinger hPanel → Domains → Domain portfolio →
-                      Manage your apex domain.
-                    </li>
-                    <li>Open DNS / Nameservers → Change nameservers.</li>
-                    <li>
-                      Choose custom nameservers and enter both Cloudflare values
-                      shown above.
-                    </li>
-                    <li>
-                      Save in Hostinger, then return here. Leave existing
-                      records intact in Cloudflare.
-                    </li>
-                  </ol>
-                  <Link url="https://hpanel.hostinger.com/domains">
-                    Open Hostinger
-                  </Link>
-                  <p className="muted">
-                    Use this option if API access is unavailable. Delegation is
-                    checked against public DNS every 30 seconds while this
-                    wizard is open.
-                  </p>
-                </div>
                 <h2>4. Attach & verify</h2>
                 <div className="status-row">
                   Nameserver delegation{" "}
@@ -1788,7 +1817,7 @@ function DomainWizard({
                     onClick={() => {
                       if (
                         confirm(
-                          `Attach ${state.name} to ${p.cloudflare_project_name} and add its CNAME? Existing conflicting records will not be replaced.`,
+                          `Attach ${state.name} to ${p.cloudflare_project_name} and update DNS?`,
                         )
                       )
                         void act("attach");

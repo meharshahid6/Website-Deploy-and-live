@@ -125,23 +125,66 @@ export async function domainAction(
         "Create or authorize the Cloudflare zone first.",
       );
     const target = await pagesHostname(c.token, c.provider_account_id, p.cloudflare_project_name);
+    const existingCname = records.find((r) => r.type === "CNAME" && r.name === d.name);
+    const hasUnrelated = records.some(
+      (r) => ["A", "AAAA"].includes(r.type) && r.name === d.name,
+    );
+    if (hasUnrelated)
+      throw new AppError(
+        409,
+        "DNS_CONFLICT",
+        "Existing website records point elsewhere. LaunchDock will not replace them. Review them in Cloudflare first.",
+      );
     if (
-      records.some(
-        (r) =>
-          ["A", "AAAA", "CNAME"].includes(r.type) &&
-          !(r.type === "CNAME" && r.content === target),
-      )
+      existingCname &&
+      !existingCname.content.endsWith(".pages.dev") &&
+      existingCname.content !== target
     )
       throw new AppError(
         409,
         "DNS_CONFLICT",
         "Existing website records point elsewhere. LaunchDock will not replace them. Review them in Cloudflare first.",
       );
+
+    try {
+      const allProjects = await cf<{ name: string }[]>(
+        c.token,
+        `/accounts/${c.provider_account_id}/pages/projects`,
+      );
+      for (const other of allProjects) {
+        if (other.name !== p.cloudflare_project_name) {
+          try {
+            const otherDomains = await cf<CFDomain[]>(
+              c.token,
+              `/accounts/${c.provider_account_id}/pages/projects/${other.name}/domains`,
+            );
+            if (otherDomains.some((x) => x.name === d.name)) {
+              await cf(
+                c.token,
+                `/accounts/${c.provider_account_id}/pages/projects/${other.name}/domains/${encodeURIComponent(d.name)}`,
+                "DELETE",
+              );
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+
     const base = `/accounts/${c.provider_account_id}/pages/projects/${p.cloudflare_project_name}/domains`;
     const attached = await cf<CFDomain[]>(c.token, base);
     if (!attached.some((x) => x.name === d.name))
       await cf(c.token, base, "POST", { name: d.name });
-    if (!records.some((r) => r.type === "CNAME" && r.content === target))
+    if (existingCname) {
+      if (existingCname.content !== target) {
+        await cf(c.token, `/zones/${zone.id}/dns_records/${existingCname.id}`, "PUT", {
+          type: "CNAME",
+          name: d.name,
+          content: target,
+          proxied: true,
+          ttl: 1,
+        });
+      }
+    } else {
       await cf(c.token, `/zones/${zone.id}/dns_records`, "POST", {
         type: "CNAME",
         name: d.name,
@@ -149,6 +192,7 @@ export async function domainAction(
         proxied: true,
         ttl: 1,
       });
+    }
     await e.DB.prepare(
       "UPDATE projects SET custom_domain=?,zone_id=?,updated_time=? WHERE id=?",
     )

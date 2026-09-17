@@ -19,6 +19,9 @@ import {
   PenLine,
   Folder,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
+  X,
 } from "lucide-react";
 import { api } from "./api";
 import { Button, Field, Badge } from "./App";
@@ -130,6 +133,79 @@ export default function Editor({
     );
   }, [draft]);
   const html = useMemo(() => previewHTML(files, entry), [files, entry]);
+  const [showFind, setShowFind] = useState(false),
+    [findText, setFindText] = useState(""),
+    [findMatches, setFindMatches] = useState<{ range: any }[]>([]),
+    [findMatchIndex, setFindMatchIndex] = useState(0);
+  const editorRef = useRef<any>(null);
+  const findInputRef = useRef<HTMLInputElement>(null);
+
+  function executeFind(query: string) {
+    setFindText(query);
+    if (!editorRef.current || !query) {
+      setFindMatches([]);
+      setFindMatchIndex(0);
+      return;
+    }
+    const model = editorRef.current.getModel();
+    if (!model) return;
+    const matches = model.findMatches(query, false, false, false, null, true);
+    setFindMatches(matches);
+    if (matches.length > 0) {
+      setFindMatchIndex(0);
+      editorRef.current.setSelection(matches[0].range);
+      editorRef.current.revealRangeInCenter(matches[0].range);
+    }
+  }
+
+  function findNext() {
+    if (!editorRef.current || !findMatches.length) return;
+    const nextIndex = (findMatchIndex + 1) % findMatches.length;
+    setFindMatchIndex(nextIndex);
+    const match = findMatches[nextIndex];
+    editorRef.current.setSelection(match.range);
+    editorRef.current.revealRangeInCenter(match.range);
+  }
+
+  function findPrev() {
+    if (!editorRef.current || !findMatches.length) return;
+    const prevIndex =
+      (findMatchIndex - 1 + findMatches.length) % findMatches.length;
+    setFindMatchIndex(prevIndex);
+    const match = findMatches[prevIndex];
+    editorRef.current.setSelection(match.range);
+    editorRef.current.revealRangeInCenter(match.range);
+  }
+
+  const toggleFind = () => {
+    setShowFind((v) => {
+      const next = !v;
+      if (next) {
+        setTimeout(() => findInputRef.current?.focus(), 60);
+      }
+      return next;
+    });
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        if (mode === "code") {
+          e.preventDefault();
+          setShowFind(true);
+          setTimeout(() => findInputRef.current?.focus(), 50);
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [mode]);
+
+  useEffect(() => {
+    if (findText && editorRef.current) {
+      executeFind(findText);
+    }
+  }, [active]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   async function operation(fn: () => Promise<void>) {
     onError("");
@@ -445,6 +521,15 @@ export default function Editor({
             </span>
             <div className="row">
               <button
+                aria-label="Find in code"
+                title="Find in code (Ctrl+F)"
+                className={showFind ? "active" : ""}
+                disabled={mode !== "code" || !selected || selected.encoding === "base64"}
+                onClick={toggleFind}
+              >
+                <Search size={15} />
+              </button>
+              <button
                 aria-label="Rename file"
                 disabled={!!busy}
                 onClick={() => rename()}
@@ -502,6 +587,66 @@ export default function Editor({
               Preview
             </button>
           </div>
+          {showFind && mode === "code" && (
+            <div className="editor-find-bar">
+              <div className="find-input-wrap">
+                <Search size={14} className="find-icon" />
+                <input
+                  ref={findInputRef}
+                  type="text"
+                  placeholder="Find in file (Enter for next, Shift+Enter for prev)..."
+                  value={findText}
+                  onChange={(e) => executeFind(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      if (e.shiftKey) findPrev();
+                      else findNext();
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      setShowFind(false);
+                      editorRef.current?.focus();
+                    }
+                  }}
+                />
+                <span className="find-match-count">
+                  {findText
+                    ? findMatches.length > 0
+                      ? `${findMatchIndex + 1} of ${findMatches.length}`
+                      : "No results"
+                    : ""}
+                </span>
+              </div>
+              <div className="find-actions">
+                <button
+                  type="button"
+                  title="Previous match (Shift+Enter)"
+                  disabled={!findMatches.length}
+                  onClick={findPrev}
+                >
+                  <ChevronUp size={14} />
+                </button>
+                <button
+                  type="button"
+                  title="Next match (Enter)"
+                  disabled={!findMatches.length}
+                  onClick={findNext}
+                >
+                  <ChevronDown size={14} />
+                </button>
+                <button
+                  type="button"
+                  title="Close (Esc)"
+                  onClick={() => {
+                    setShowFind(false);
+                    editorRef.current?.focus();
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+          )}
           <div className="editor-body">
             {mode === "preview" ? (
               p.framework_type !== "static" ? (
@@ -573,6 +718,10 @@ export default function Editor({
                   language={language(selected.path)}
                   theme="vs-dark"
                   value={selected.content}
+                  onMount={(editor) => {
+                    editorRef.current = editor;
+                    if (findText) executeFind(findText);
+                  }}
                   onChange={(value) =>
                     setDraft((d) => ({
                       ...d,

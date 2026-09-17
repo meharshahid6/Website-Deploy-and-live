@@ -1108,10 +1108,87 @@ details li {
   padding: 10px 17px;
   font-size: 10px;
 }
+.editor-toolbar button.active {
+  color: var(--blue);
+  background: #202735;
+  border-radius: 4px;
+}
 .editor-tabs button.active {
   border-color: var(--blue);
   color: #b8ceff;
   background: #202735;
+}
+.editor-find-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background: #141a24;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+}
+.editor-find-bar .find-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0d1219;
+  border: 1px solid #283548;
+  border-radius: 6px;
+  padding: 4px 10px;
+  flex: 1;
+  max-width: 460px;
+  transition: border-color 0.15s;
+}
+.editor-find-bar .find-input-wrap:focus-within {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+}
+.editor-find-bar .find-icon {
+  color: #64748b;
+  flex-shrink: 0;
+}
+.editor-find-bar input {
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #e2e8f0;
+  font-size: 12px;
+  flex: 1;
+  padding: 0;
+}
+.editor-find-bar input::placeholder {
+  color: #64748b;
+}
+.editor-find-bar .find-match-count {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  font-family: Consolas, monospace;
+}
+.editor-find-bar .find-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.editor-find-bar .find-actions button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #94a3b8;
+  border-radius: 4px;
+  padding: 4px 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.editor-find-bar .find-actions button:hover:not(:disabled) {
+  background: #202b3c;
+  color: #f1f5f9;
+}
+.editor-find-bar .find-actions button:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 .editor-body {
   min-height: 500px;
