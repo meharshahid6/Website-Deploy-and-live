@@ -15,6 +15,25 @@ export function local(r: Request, e: AppEnv) {
 }
 export async function authorize(r: Request, e: AppEnv) {
   if (local(r, e)) return "local";
+  if (e.DASHBOARD_KEY) {
+    const headerKey =
+      r.headers.get("X-LaunchDock-Key") ||
+      r.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
+    const cookieKey = r.headers
+      .get("Cookie")
+      ?.split(/;\s*/)
+      .find((c) => c.startsWith("ld_key="))
+      ?.slice(7);
+    const provided = headerKey || (cookieKey ? decodeURIComponent(cookieKey) : "");
+    if (provided && provided === e.DASHBOARD_KEY) {
+      return "owner";
+    }
+    throw new AppError(
+      401,
+      "AUTH_REQUIRED",
+      "Please enter the LaunchDock Secret Key to unlock your workspace.",
+    );
+  }
   if (!e.ACCESS_TEAM_DOMAIN || !e.ACCESS_AUD || !e.OWNER_EMAIL)
     throw new AppError(
       503,
@@ -58,10 +77,12 @@ export function csrf(r: Request, e: AppEnv) {
   if (!["GET", "HEAD", "OPTIONS"].includes(r.method)) {
     // The local Worker also serves built assets on 8787. Accept only that
     // exact same origin, not arbitrary localhost ports or external origins.
+    const origin = r.headers.get("Origin");
+    const sameOrigin = origin && origin === new URL(r.url).origin;
     const sameLocalOrigin =
-      local(r, e) && r.headers.get("Origin") === new URL(r.url).origin;
+      local(r, e) && origin === new URL(r.url).origin;
     if (
-      (r.headers.get("Origin") !== e.APP_ORIGIN && !sameLocalOrigin) ||
+      (origin !== e.APP_ORIGIN && !sameLocalOrigin && !sameOrigin) ||
       r.headers.get("X-LaunchDock") !== "1"
     )
       throw new AppError(

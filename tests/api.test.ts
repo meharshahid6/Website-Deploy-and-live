@@ -584,3 +584,57 @@ it("deletes a project from the database and calls provider APIs", async () => {
   expect(deletedUrls.some((u) => u.includes("/repos/owner/repo"))).toBe(true);
 });
 
+it("supports DASHBOARD_KEY protection, unlock, and lock lifecycle", async () => {
+  env.LOCAL_DEV = "false";
+  env.DASHBOARD_KEY = "Shahid@LaunchDock2026";
+  
+  // Status is locked without key
+  const statusRes = await request("/api/auth/status");
+  expect(statusRes.status).toBe(200);
+  const statusData = (await statusRes.json()) as { data: { locked: boolean; authType: string; local: boolean } };
+  expect(statusData.data).toEqual({ locked: true, authType: "key", local: false });
+
+  // Accessing protected route without key fails with 401
+  const unauthRes = await request("/api/projects");
+  expect(unauthRes.status).toBe(401);
+
+  // Unlocking with invalid key fails with 401
+  const wrongUnlock = await request("/api/auth/unlock", "POST", { key: "WrongKey123" });
+  expect(wrongUnlock.status).toBe(401);
+
+  // Unlocking with valid key succeeds and sets cookie
+  const unlockRes = await request("/api/auth/unlock", "POST", { key: "Shahid@LaunchDock2026" });
+  expect(unlockRes.status).toBe(200);
+  const setCookie = unlockRes.headers.get("Set-Cookie");
+  expect(setCookie).toContain("ld_key=Shahid%40LaunchDock2026");
+
+  // Accessing protected route with X-LaunchDock-Key header succeeds
+  const authedHeaderRes = await worker.fetch(
+    new Request("http://127.0.0.1:5173/api/projects", {
+      headers: {
+        "X-LaunchDock": "1",
+        "X-LaunchDock-Key": "Shahid@LaunchDock2026",
+      },
+    }),
+    env,
+  );
+  expect(authedHeaderRes.status).toBe(200);
+
+  // Accessing protected route with Cookie succeeds
+  const authedCookieRes = await worker.fetch(
+    new Request("http://127.0.0.1:5173/api/projects", {
+      headers: {
+        "X-LaunchDock": "1",
+        Cookie: "ld_key=Shahid%40LaunchDock2026",
+      },
+    }),
+    env,
+  );
+  expect(authedCookieRes.status).toBe(200);
+
+  // Locking clears cookie
+  const lockRes = await request("/api/auth/lock", "POST");
+  expect(lockRes.status).toBe(200);
+  expect(lockRes.headers.get("Set-Cookie")).toContain("Max-Age=0");
+});
+

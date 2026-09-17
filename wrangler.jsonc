@@ -24,11 +24,12 @@
     },
   ],
   "vars": {
-    "APP_ORIGIN": "http://127.0.0.1:5173",
+    "APP_ORIGIN": "https://website-deploy-and-live.agentflowcloud.workers.dev",
     "ACCESS_TEAM_DOMAIN": "",
     "ACCESS_AUD": "",
     "OWNER_EMAIL": "",
     "LOCAL_DEV": "false",
+    "DASHBOARD_KEY": "Shahid@LaunchDock2026",
   },
   "observability": { "enabled": false },
 }

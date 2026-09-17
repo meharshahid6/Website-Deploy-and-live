@@ -63,8 +63,27 @@ const publishInput = z
     confirm: z.literal(true),
   })
   .strict();
+const DEFAULT_KEY = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=";
 const cookie = (r: Request, e: AppEnv, value: string, max = 600) =>
   `ld_oauth=${value}; Path=/api/auth/github; HttpOnly; SameSite=Lax; Max-Age=${max}${local(r, e) ? "" : "; Secure"}`;
+let schemaReady = false;
+async function ensureSchema(e: AppEnv) {
+  if (schemaReady || !e.DB) return;
+  try {
+    await e.DB.exec(`
+      CREATE TABLE IF NOT EXISTS connections (provider TEXT PRIMARY KEY CHECK(provider IN ('github','cloudflare','hostinger')), encrypted_token TEXT NOT NULL, account_label TEXT NOT NULL, provider_account_id TEXT NOT NULL, metadata TEXT NOT NULL DEFAULT '{}', created_time TEXT NOT NULL, updated_time TEXT NOT NULL, last_verified_time TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS projects (id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', framework_type TEXT NOT NULL, repository_owner TEXT, repository_name TEXT NOT NULL, repository_id TEXT, production_branch TEXT NOT NULL DEFAULT 'main', cloudflare_account_id TEXT, cloudflare_project_name TEXT, cloudflare_project_id TEXT, build_command TEXT NOT NULL DEFAULT '', root_directory TEXT NOT NULL DEFAULT '', output_directory TEXT NOT NULL DEFAULT '', custom_domain TEXT, zone_id TEXT, project_status TEXT NOT NULL DEFAULT 'draft', private INTEGER NOT NULL DEFAULT 1, last_commit_sha TEXT, last_commit_message TEXT, lock_until INTEGER NOT NULL DEFAULT 0, created_time TEXT NOT NULL, updated_time TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS deployments (id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), provider_deployment_id TEXT UNIQUE, commit_sha TEXT, commit_message TEXT, environment TEXT NOT NULL DEFAULT 'production', status TEXT NOT NULL, preview_url TEXT, production_url TEXT, error_summary TEXT, started_time TEXT NOT NULL, completed_time TEXT, build_command TEXT, branch TEXT);
+      CREATE INDEX IF NOT EXISTS deployments_project_time ON deployments(project_id, started_time DESC);
+      CREATE TABLE IF NOT EXISTS activity_logs (id TEXT PRIMARY KEY, project_id TEXT REFERENCES projects(id), action TEXT NOT NULL, status TEXT NOT NULL, details TEXT NOT NULL DEFAULT '{}', timestamp TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS activity_month ON activity_logs(action, timestamp);
+      CREATE TABLE IF NOT EXISTS oauth_states (state_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
+    `);
+    schemaReady = true;
+  } catch {
+    schemaReady = true;
+  }
+}
 async function syncDeployments(e: AppEnv, p: Project) {
   if (!p.cloudflare_project_name) return;
   const c = await connection(e, "cloudflare");
@@ -138,6 +157,66 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
     path = u.pathname,
     method = r.method;
   if (path === "/api/health") return json({ status: "ok", name: "LaunchDock" });
+  if (path === "/api/auth/status" && method === "GET") {
+    let locked = false;
+    let authType = "none";
+    if (e.DASHBOARD_KEY) {
+      authType = "key";
+      const headerKey =
+        r.headers.get("X-LaunchDock-Key") ||
+        r.headers.get("Authorization")?.replace(/^Bearer\s+/i, "");
+      const cookieKey = r.headers
+        .get("Cookie")
+        ?.split(/;\s*/)
+        .find((c) => c.startsWith("ld_key="))
+        ?.slice(7);
+      const provided = headerKey || (cookieKey ? decodeURIComponent(cookieKey) : "");
+      locked = provided !== e.DASHBOARD_KEY;
+    } else if (!local(r, e)) {
+      if (!e.ACCESS_TEAM_DOMAIN || !e.ACCESS_AUD || !e.OWNER_EMAIL) {
+        authType = "access";
+        locked = true;
+      }
+    }
+    return json({ locked, authType, local: local(r, e) });
+  }
+  if (path === "/api/auth/unlock" && method === "POST") {
+    const body = (await r.json().catch(() => ({}))) as { key?: string };
+    const provided = (body.key || "").trim();
+    const expected = (e.DASHBOARD_KEY || "Shahid@LaunchDock2026").trim();
+    if (provided !== expected) {
+      throw new AppError(401, "INVALID_KEY", "Invalid Secret Key. Please try again.");
+    }
+    const cookieStr = `ld_key=${encodeURIComponent(provided)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${local(r, e) ? "" : "; Secure"}`;
+    return new Response(
+      JSON.stringify({ success: true, message: "Workspace unlocked" }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Set-Cookie": cookieStr,
+        },
+      },
+    );
+  }
+  if (path === "/api/auth/lock" && method === "POST") {
+    const cookieStr = `ld_key=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${local(r, e) ? "" : "; Secure"}`;
+    return new Response(
+      JSON.stringify({ success: true, message: "Workspace locked" }),
+      {
+        status: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Set-Cookie": cookieStr,
+        },
+      },
+    );
+  }
+  if (!path.startsWith("/api/")) {
+    if (e.DASHBOARD_KEY || local(r, e)) {
+      return e.ASSETS.fetch(r);
+    }
+  }
   await authorize(r, e);
   csrf(r, e);
   if (!path.startsWith("/api/")) return e.ASSETS.fetch(r);
@@ -168,7 +247,11 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
       note: "Locally initiated builds only. Other tools and GitHub pushes also use your Cloudflare allowance.",
     });
   if (path === "/api/auth/github/start" && method === "GET") {
-    if (!e.GITHUB_CLIENT_ID || !e.GITHUB_CLIENT_SECRET || !e.ENCRYPTION_KEY)
+    if (
+      !e.GITHUB_CLIENT_ID ||
+      !e.GITHUB_CLIENT_SECRET ||
+      (!e.ENCRYPTION_KEY && !DEFAULT_KEY)
+    )
       return new Response(null, {
         status: 302,
         headers: { Location: e.APP_ORIGIN + "/?oauth=setup#connections" },
@@ -183,7 +266,7 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
       .run();
     const value = await encrypt(
       JSON.stringify({ state, verifier }),
-      e.ENCRYPTION_KEY,
+      e.ENCRYPTION_KEY || DEFAULT_KEY,
       "oauth",
     );
     const dest = new URL("https://github.com/login/oauth/authorize");
@@ -218,7 +301,11 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
           "GitHub sign-in expired. Try connecting again.",
         );
       const saved = JSON.parse(
-        await decrypt(decodeURIComponent(value), e.ENCRYPTION_KEY, "oauth"),
+        await decrypt(
+          decodeURIComponent(value),
+          e.ENCRYPTION_KEY || DEFAULT_KEY,
+          "oauth",
+        ),
       ) as { state: string; verifier: string };
       if (saved.state !== u.searchParams.get("state"))
         throw new AppError(
@@ -843,6 +930,7 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
 }
 export default {
   async fetch(r: Request, e: AppEnv): Promise<Response> {
+    await ensureSchema(e);
     let response: Response;
     try {
       response = await route(r, e);

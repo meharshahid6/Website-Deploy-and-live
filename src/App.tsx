@@ -36,8 +36,13 @@ import {
   X,
   Trash2,
   CheckCircle2,
+  Lock,
+  Unlock,
+  KeyRound,
+  Eye,
+  EyeOff,
 } from "lucide-react";
-import { api } from "./api";
+import { api, unlockWorkspace, lockWorkspace, checkAuthStatus } from "./api";
 import { importFiles, importZip, starter, type ImportReport } from "./import";
 import { detect, projectInput, LIMITS } from "../shared/validation";
 import type {
@@ -201,7 +206,13 @@ export default function App() {
     [loading, setLoading] = useState(true),
     [mobile, setMobile] = useState(false),
     [local, setLocal] = useState(false),
-    [toasts, setToasts] = useState<Toast[]>([]);
+    [toasts, setToasts] = useState<Toast[]>([]),
+    [locked, setLocked] = useState(false),
+    [secretKeyInput, setSecretKeyInput] = useState(""),
+    [showSecretKey, setShowSecretKey] = useState(false),
+    [rememberKey, setRememberKey] = useState(true),
+    [unlocking, setUnlocking] = useState(false),
+    [unlockError, setUnlockError] = useState("");
   const toast = useCallback((message: string, type: "success" | "error" = "success") => {
     const id = ++toastId;
     setToasts((t) => [...t, { id, message, type }]);
@@ -225,21 +236,71 @@ export default function App() {
       setConnections(c.connections);
       setLocal(c.local);
       setUsage(u);
+      setLocked(false);
     } catch (e) {
-      setError((e as Error).message);
+      const msg = (e as Error).message || "";
+      if (
+        msg.includes("Secret Key") ||
+        msg.includes("AUTH_REQUIRED") ||
+        msg.includes("unlock")
+      ) {
+        setLocked(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
   }
   useEffect(() => {
+    const onAuthRequired = () => setLocked(true);
+    window.addEventListener("launchdock:auth-required", onAuthRequired);
+    void checkAuthStatus().then((status) => {
+      if (status.locked) setLocked(true);
+    });
     void refresh();
     const h = () => {
       setView(location.hash.slice(1).split("/")[0] || "dashboard");
       void refresh();
     };
     addEventListener("hashchange", h);
-    return () => removeEventListener("hashchange", h);
+    return () => {
+      window.removeEventListener("launchdock:auth-required", onAuthRequired);
+      removeEventListener("hashchange", h);
+    };
   }, []);
+  const handleUnlock = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!secretKeyInput.trim()) {
+      setUnlockError("Please enter your secret key");
+      return;
+    }
+    setUnlocking(true);
+    setUnlockError("");
+    try {
+      await unlockWorkspace(secretKeyInput.trim(), rememberKey);
+      setLocked(false);
+      setUnlockError("");
+      setSecretKeyInput("");
+      toast("Workspace unlocked successfully!");
+      await refresh();
+    } catch (err) {
+      setUnlockError(
+        (err as Error).message || "Invalid secret key. Please try again.",
+      );
+    } finally {
+      setUnlocking(false);
+    }
+  };
+  const handleLock = async () => {
+    try {
+      await lockWorkspace();
+      setLocked(true);
+      toast("Workspace locked");
+    } catch {
+      setLocked(true);
+    }
+  };
   const go = (v: string, p?: Project) => {
     if (p) setSelected(p);
     setView(v);
@@ -309,6 +370,107 @@ export default function App() {
       setDeletingId(null);
     }
   };
+  if (locked) {
+    return (
+      <ErrorBoundary>
+        <div className="app lock-screen-container">
+          <Toasts items={toasts} onDismiss={dismissToast} />
+          <div className="lock-modal-wrapper">
+            <div className="lock-modal-card">
+              <div className="lock-header">
+                <div className="lock-icon-halo">
+                  <KeyRound size={32} className="lock-key-icon" />
+                </div>
+                <div className="lock-brand">
+                  <Rocket size={16} />
+                  <span>LaunchDock.</span>
+                </div>
+                <h2>Workspace Protected</h2>
+                <p className="lock-subtext">
+                  Yeh dashboard private hai. Enter your Secret Key to access deployments and projects.
+                </p>
+              </div>
+
+              {unlockError && (
+                <div className="lock-alert" role="alert">
+                  <AlertCircle size={15} />
+                  <span>{unlockError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleUnlock} className="lock-form">
+                <div className="lock-field">
+                  <label htmlFor="dashboard-key-input">Dashboard Secret Key</label>
+                  <div className="lock-input-group">
+                    <Lock size={15} className="lock-input-icon" />
+                    <input
+                      id="dashboard-key-input"
+                      type={showSecretKey ? "text" : "password"}
+                      value={secretKeyInput}
+                      onChange={(e) => {
+                        setSecretKeyInput(e.target.value);
+                        if (unlockError) setUnlockError("");
+                      }}
+                      placeholder="Enter secret key..."
+                      autoFocus
+                      autoComplete="current-password"
+                      className="lock-text-input"
+                    />
+                    <button
+                      type="button"
+                      className="lock-eye-btn"
+                      onClick={() => setShowSecretKey(!showSecretKey)}
+                      title={showSecretKey ? "Hide passcode" : "Show passcode"}
+                      aria-label="Toggle password visibility"
+                    >
+                      {showSecretKey ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="lock-options">
+                  <label className="lock-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={rememberKey}
+                      onChange={(e) => setRememberKey(e.target.checked)}
+                    />
+                    <span>Remember on this device</span>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  className="button primary lock-submit-btn"
+                  disabled={unlocking}
+                >
+                  {unlocking ? (
+                    <>
+                      <Loader2 size={16} className="spin-btn" />
+                      <span>Verifying key…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Unlock size={16} />
+                      <span>Unlock Dashboard</span>
+                    </>
+                  )}
+                </button>
+              </form>
+
+              <div className="lock-help-box">
+                <ShieldCheck size={14} className="lock-help-icon" />
+                <div>
+                  <strong>Default Key:</strong> <code>Shahid@LaunchDock2026</code>
+                  <small>Ap is key ko kisi bhi waqt wrangler.jsonc m change kar saktey hain.</small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </ErrorBoundary>
+    );
+  }
   return (
     <ErrorBoundary>
     <div className="app">
@@ -460,10 +622,23 @@ export default function App() {
                     : view[0]?.toUpperCase() + view.slice(1)}
             </strong>
           )}
-          <span className="top-status">
-            <span className="online-dot" />
-            {local ? "Local development" : "Private dashboard"}
-          </span>
+          <div className="topbar-status-group">
+            <span className="top-status">
+              <span className="online-dot" />
+              {local ? "Local development" : "Private dashboard"}
+            </span>
+            {!local && (
+              <button
+                type="button"
+                className="top-lock-btn"
+                title="Lock Workspace"
+                onClick={handleLock}
+              >
+                <Lock size={12} />
+                <span>Lock</span>
+              </button>
+            )}
+          </div>
         </header>
         <main>
           {error && (

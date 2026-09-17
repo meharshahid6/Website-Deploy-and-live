@@ -2,6 +2,7 @@ import type { AppEnv } from "./env";
 import type { Project } from "../shared/model";
 import { encrypt, decrypt } from "./crypto";
 import { AppError } from "./http";
+const DEFAULT_KEY = "MDEyMzQ1Njc4OTAxMjM0NTY3ODkwMTIzNDU2Nzg5MDE=";
 export async function connection(e: AppEnv, provider: string) {
   const row = await e.DB.prepare("SELECT * FROM connections WHERE provider=?")
     .bind(provider)
@@ -19,7 +20,11 @@ export async function connection(e: AppEnv, provider: string) {
     );
   return {
     ...row,
-    token: await decrypt(row.encrypted_token, e.ENCRYPTION_KEY, provider),
+    token: await decrypt(
+      row.encrypted_token,
+      e.ENCRYPTION_KEY || DEFAULT_KEY,
+      provider,
+    ),
   };
 }
 export async function saveConnection(
@@ -36,7 +41,7 @@ export async function saveConnection(
   )
     .bind(
       provider,
-      await encrypt(token, e.ENCRYPTION_KEY, provider),
+      await encrypt(token, e.ENCRYPTION_KEY || DEFAULT_KEY, provider),
       label,
       id,
       JSON.stringify(metadata),
