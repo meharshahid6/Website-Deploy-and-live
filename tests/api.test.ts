@@ -277,7 +277,7 @@ it("secures OAuth cookies, PKCE, state and failed callback cleanup", async () =>
   expect(start.status).toBe(302);
   const url = new URL(start.headers.get("Location")!);
   expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-  expect(url.searchParams.get("scope")).toBe("repo");
+  expect(url.searchParams.get("scope")).toBe("repo,delete_repo");
   expect(start.headers.get("Set-Cookie")).toContain("HttpOnly");
   expect(db.prepare("SELECT COUNT(*) AS n FROM oauth_states").get()?.n).toBe(1);
   const bad = await request(

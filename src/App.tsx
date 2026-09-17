@@ -118,6 +118,7 @@ export function Button({
   primary?: boolean;
   disabled?: boolean;
   "aria-label"?: string;
+  title?: string;
 }) {
   return (
     <button
@@ -267,15 +268,28 @@ export default function App() {
         deleted: boolean;
         cloudflare?: boolean;
         github?: boolean;
+        errors?: { github?: string; cloudflare?: string };
       }>("/projects/" + p.id, "DELETE", { confirm: true });
       await del("draft:" + p.id);
       if (selected?.id === p.id) setSelected(null);
+      const parts: string[] = [];
+      if (res.github) parts.push("GitHub");
+      if (res.cloudflare) parts.push("Cloudflare Pages");
       let doneMsg = `Project "${p.name}" deleted`;
-      if (res.github && res.cloudflare)
-        doneMsg += " (removed from GitHub & Cloudflare Pages)";
-      else if (res.github) doneMsg += " (removed from GitHub)";
-      else if (res.cloudflare) doneMsg += " (removed from Cloudflare Pages)";
+      if (parts.length) doneMsg += ` (removed from ${parts.join(" & ")})`;
       toast(doneMsg);
+      if (hasRepo && !res.github) {
+        toast(
+          `GitHub repo (${p.repository_owner}/${p.repository_name}) could not be removed: ${res.errors?.github || "Missing delete_repo permission. Please reconnect GitHub in Connections."}`,
+          "error",
+        );
+      }
+      if (hasCF && !res.cloudflare) {
+        toast(
+          `Cloudflare Pages project (${p.cloudflare_project_name}) could not be removed: ${res.errors?.cloudflare || "Check API permissions."}`,
+          "error",
+        );
+      }
       await refresh();
       go("dashboard");
     } catch (e) {
@@ -1250,6 +1264,16 @@ function Connections({
               )}
               {c && (
                 <div className="form-actions">
+                  {provider === "github" && (
+                    <Button
+                      onClick={() => {
+                        location.href = "/api/auth/github";
+                      }}
+                      title="Re-authorize GitHub to grant repository deletion permissions"
+                    >
+                      Update permissions
+                    </Button>
+                  )}
                   <Button
                     onClick={() =>
                       void run(async () => {

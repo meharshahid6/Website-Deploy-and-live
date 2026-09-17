@@ -190,7 +190,7 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
     dest.search = new URLSearchParams({
       client_id: e.GITHUB_CLIENT_ID,
       redirect_uri: e.APP_ORIGIN + "/api/auth/github/callback",
-      scope: "repo",
+      scope: "repo,delete_repo",
       state,
       code_challenge: await hash(verifier),
       code_challenge_method: "S256",
@@ -391,36 +391,64 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
       .parse(await jsonBody(r));
 
     let cloudflareDeleted = false;
-    if (p.cloudflare_project_name) {
+    let cloudflareError: string | undefined;
+    const cfName = p.cloudflare_project_name || p.name;
+    if (cfName) {
       try {
         const c = await connection(e, "cloudflare");
         const accountId = p.cloudflare_account_id || c.provider_account_id;
+        try {
+          const domains = await cf<{ name: string }[]>(
+            c.token,
+            `/accounts/${accountId}/pages/projects/${encodeURIComponent(cfName)}/domains`,
+          );
+          if (Array.isArray(domains)) {
+            for (const d of domains) {
+              try {
+                await cf(
+                  c.token,
+                  `/accounts/${accountId}/pages/projects/${encodeURIComponent(cfName)}/domains/${encodeURIComponent(d.name)}`,
+                  "DELETE",
+                );
+              } catch {}
+            }
+          }
+        } catch {}
         await cf(
           c.token,
-          `/accounts/${accountId}/pages/projects/${p.cloudflare_project_name}`,
+          `/accounts/${accountId}/pages/projects/${encodeURIComponent(cfName)}`,
           "DELETE",
         );
         cloudflareDeleted = true;
       } catch (err) {
         if (err instanceof AppError && err.status === 404) {
           cloudflareDeleted = true;
+        } else {
+          cloudflareError = (err as Error).message || "Cloudflare deletion failed";
         }
       }
     }
 
     let githubDeleted = false;
-    if (p.repository_owner && p.repository_name) {
+    let githubError: string | undefined;
+    const repoOwner = p.repository_owner;
+    const repoName = p.repository_name || p.name;
+    if (repoOwner && repoName) {
       try {
         const g = await connection(e, "github");
         await gh(
           g.token,
-          `/repos/${p.repository_owner}/${p.repository_name}`,
+          `/repos/${encodeURIComponent(repoOwner)}/${encodeURIComponent(repoName)}`,
           "DELETE",
         );
         githubDeleted = true;
       } catch (err) {
         if (err instanceof AppError && err.status === 404) {
           githubDeleted = true;
+        } else {
+          githubError =
+            (err as Error).message ||
+            "GitHub deletion failed (ensure delete_repo permission is granted)";
         }
       }
     }
@@ -436,6 +464,10 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
       deleted: true,
       cloudflare: cloudflareDeleted,
       github: githubDeleted,
+      errors: {
+        ...(cloudflareError ? { cloudflare: cloudflareError } : {}),
+        ...(githubError ? { github: githubError } : {}),
+      },
     });
   }
   if (action === "files" && method === "GET") {
