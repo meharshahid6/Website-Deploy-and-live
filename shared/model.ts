@@ -6,6 +6,7 @@ export interface SourceFile {
 export interface Project {
   last_deployment_time?: string | null;
   latest_preview_url?: string | null;
+  latest_production_url?: string | null;
   id: string;
   name: string;
   description: string;

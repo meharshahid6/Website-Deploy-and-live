@@ -410,9 +410,7 @@ export default function App() {
                           <div className="project-meta">
                             <Globe size={14} />
                             {p.custom_domain ??
-                              (p.cloudflare_project_name
-                                ? `${p.cloudflare_project_name}.pages.dev`
-                                : "No domain yet")}
+                              (p.latest_production_url?.replace("https://", "") ?? "No live domain yet")}
                           </div>
                           {p.last_deployment_time && (
                             <div className="project-meta">
@@ -451,7 +449,7 @@ export default function App() {
                             <Link url={p.latest_preview_url}>Preview</Link>
                             {p.project_status === "live" && (
                               <Link
-                                url={`https://${p.custom_domain ?? p.cloudflare_project_name + ".pages.dev"}`}
+                                url={p.latest_production_url}
                               >
                                 Live website
                               </Link>

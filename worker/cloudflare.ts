@@ -6,6 +6,12 @@ export interface CFProject {
   subdomain: string;
   source?: { type: string; config: { repo_id: string; owner: string } };
 }
+export async function pagesHostname(token: string, account: string, name: string) {
+  const p = await cf<CFProject>(token, `/accounts/${account}/pages/projects/${name}`);
+  if (!/^[a-z0-9-]+\.pages\.dev$/.test(p.subdomain))
+    throw new AppError(502, 'PAGES_ADDRESS', 'Cloudflare did not return a valid Pages address. Refresh deployment details.');
+  return p.subdomain;
+}
 export interface CFDeployment {
   id: string;
   url: string;

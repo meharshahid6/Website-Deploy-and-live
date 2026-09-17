@@ -24,6 +24,7 @@ import {
 import { encrypt, decrypt, hash } from "./crypto";
 import { createRepository, pushInitial, commitTree } from "./github";
 import {
+  pagesHostname,
   verifyCloudflare,
   createPages,
   ensureInitialDeployment,
@@ -73,6 +74,7 @@ async function syncDeployments(e: AppEnv, p: Project) {
       "ACCOUNT_CHANGED",
       "Reconnect the Cloudflare account used for this project.",
     );
+  const productionHost = await pagesHostname(c.token, c.provider_account_id, p.cloudflare_project_name);
   const list = await cf<CFDeployment[]>(
     c.token,
     `/accounts/${c.provider_account_id}/pages/projects/${p.cloudflare_project_name}/deployments?per_page=20`,
@@ -103,7 +105,7 @@ async function syncDeployments(e: AppEnv, p: Project) {
         status,
         status === "successful" ? d.url : null,
         status === "successful" && d.environment === "production"
-          ? `https://${p.cloudflare_project_name}.pages.dev`
+          ? `https://${productionHost}`
           : null,
         status === "failed"
           ? `Cloudflare failed during ${stage.name}. Open full build details.`
@@ -350,7 +352,7 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
     return json(
       (
         await e.DB.prepare(
-          "SELECT p.*,(SELECT d.started_time FROM deployments d WHERE d.project_id=p.id ORDER BY d.started_time DESC LIMIT 1) AS last_deployment_time,(SELECT d.preview_url FROM deployments d WHERE d.project_id=p.id AND d.status='successful' ORDER BY d.started_time DESC LIMIT 1) AS latest_preview_url FROM projects p ORDER BY p.updated_time DESC",
+          "SELECT p.*,(SELECT d.started_time FROM deployments d WHERE d.project_id=p.id ORDER BY d.started_time DESC LIMIT 1) AS last_deployment_time,(SELECT d.preview_url FROM deployments d WHERE d.project_id=p.id AND d.status='successful' ORDER BY d.started_time DESC LIMIT 1) AS latest_preview_url,(SELECT d.production_url FROM deployments d WHERE d.project_id=p.id AND d.status='successful' AND d.environment='production' ORDER BY d.started_time DESC LIMIT 1) AS latest_production_url FROM projects p ORDER BY p.updated_time DESC",
         ).all()
       ).results,
     );

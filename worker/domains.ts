@@ -4,7 +4,7 @@ import { cf, provider, AppError } from "./http";
 import { connection, log } from "./store";
 import type { AppEnv } from "./env";
 import type { Project } from "../shared/model";
-import type { Zone, DNSRecord, CFDomain } from "./cloudflare";
+import { pagesHostname, type Zone, type DNSRecord, type CFDomain } from "./cloudflare";
 export const domainInput = z
   .object({
     domain: z.string().max(253),
@@ -124,7 +124,7 @@ export async function domainAction(
         "ZONE_REQUIRED",
         "Create or authorize the Cloudflare zone first.",
       );
-    const target = `${p.cloudflare_project_name}.pages.dev`;
+    const target = await pagesHostname(c.token, c.provider_account_id, p.cloudflare_project_name);
     if (
       records.some(
         (r) =>
