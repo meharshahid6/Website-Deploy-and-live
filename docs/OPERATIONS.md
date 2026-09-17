@@ -1,5 +1,7 @@
 # Security, limits and recovery
 
+Local development accepts the configured frontend origin and the exact same origin as a loopback HTTP Worker request. This lets the dashboard served on port 8787 submit forms while the Vite frontend uses 5173. Other origins and ports remain blocked; production still requires the exact configured APP_ORIGIN and X-LaunchDock header. Use the Connections card's configured callback URL for GitHub OAuth even when viewing built assets on 8787.
+
 ## Security boundaries
 
 - Access JWTs are verified on the Worker with RS256, the configured issuer/audience and exact owner email. Headers claiming an email without a valid signed JWT are insufficient.

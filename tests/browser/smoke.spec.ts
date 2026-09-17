@@ -91,7 +91,7 @@ test("dashboard, import, Monaco, local preview, draft recovery and connections",
     page.getByRole("heading", { name: "Your tools, connected." }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: "Authorize GitHub" }),
+    page.getByRole("heading", { name: "One-time GitHub setup required" }),
   ).toBeVisible();
   await page.screenshot({
     path: `artifacts/${info.project.name}-connections.png`,
@@ -131,13 +131,11 @@ test("ZIP reports blocked secrets, preserves binary data, and rejects traversal"
     ".env": strToU8("DO_NOT_PUBLISH=test"),
     "node_modules/test.js": strToU8("ignored"),
   });
-  await page
-    .getByLabel("Upload zip")
-    .setInputFiles({
-      name: "site.zip",
-      mimeType: "application/zip",
-      buffer: Buffer.from(archive),
-    });
+  await page.getByLabel("Upload zip").setInputFiles({
+    name: "site.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from(archive),
+  });
   await expect(
     page.getByText("2 accepted files · 1 ignored · 1 blocked"),
   ).toBeVisible();
@@ -147,13 +145,11 @@ test("ZIP reports blocked secrets, preserves binary data, and rejects traversal"
     "../escape.html": strToU8("bad"),
     "index.html": strToU8("safe"),
   });
-  await page
-    .getByLabel("Upload zip")
-    .setInputFiles({
-      name: "unsafe.zip",
-      mimeType: "application/zip",
-      buffer: Buffer.from(unsafe),
-    });
+  await page.getByLabel("Upload zip").setInputFiles({
+    name: "unsafe.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from(unsafe),
+  });
   await expect(page.locator(".alert.error")).toContainText("Unsafe ZIP path");
 });
 
@@ -166,13 +162,11 @@ test("preview cannot access parent storage or make network requests", async ({
   });
   await page.goto("/#new");
   const html = `<h1>Isolated</h1><p id="result">Checking</p><script>try{parent.parent.localStorage.setItem('escaped','yes');document.querySelector('#result').textContent='Unsafe'}catch{document.querySelector('#result').textContent='Parent isolated'};fetch('https://blocked.invalid/leak').catch(()=>{});</script>`;
-  await page
-    .getByLabel("Upload files")
-    .setInputFiles({
-      name: "index.html",
-      mimeType: "text/html",
-      buffer: Buffer.from(html),
-    });
+  await page.getByLabel("Upload files").setInputFiles({
+    name: "index.html",
+    mimeType: "text/html",
+    buffer: Buffer.from(html),
+  });
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page
     .getByLabel("Project name", { exact: true })

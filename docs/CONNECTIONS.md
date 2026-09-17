@@ -5,8 +5,8 @@
 1. In GitHub, open **Settings → Developer settings → OAuth Apps → New OAuth App**: https://github.com/settings/developers.
 2. Name it **LaunchDock Personal**. For local development, set Homepage URL to `http://127.0.0.1:5173` and Authorization callback URL to `http://127.0.0.1:5173/api/auth/github/callback`.
 3. For production, create a separate OAuth App with the final HTTPS dashboard origin and the same `/api/auth/github/callback` path. Separate apps prevent local/production callback confusion.
-4. Copy Client ID into your ignored `.dev.vars` as `GITHUB_CLIENT_ID=...`. Generate a client secret and add it as `GITHUB_CLIENT_SECRET=...` in that same local file. Do not commit it. There is no `VITE_` secret variable.
-5. Restart the local Worker after editing secrets. Open **Connections → Authorize GitHub** and approve access on GitHub’s page.
+4. In this project's own PowerShell terminal run `npm run setup:github`. Enter the Client ID and generated Client Secret into its prompts; secret input is hidden. The helper preserves the encryption key and saves only to ignored `.dev.vars`. Never send these credentials in chat. Alternatively edit `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.dev.vars` yourself. There is no `VITE_` secret variable.
+5. Restart `npm run dev` after editing secrets. Open **Connections → Check GitHub setup**. Once ready, **Authorize GitHub** appears; approve access on GitHub’s page. Before setup, the card displays the exact homepage and callback URLs instead of sending you to a JSON error page.
 6. For production, enter each value into the terminal prompts:
 
 ```sh

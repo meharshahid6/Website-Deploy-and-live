@@ -138,7 +138,20 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
     const rows = await e.DB.prepare(
       "SELECT provider,account_label,provider_account_id,metadata,last_verified_time FROM connections",
     ).all();
-    return json({ connections: rows.results, local: local(r, e) });
+    return json({
+      connections: rows.results,
+      local: local(r, e),
+      setup: {
+        githubReady: !!(
+          e.GITHUB_CLIENT_ID &&
+          e.GITHUB_CLIENT_SECRET &&
+          e.ENCRYPTION_KEY
+        ),
+        appOrigin: e.APP_ORIGIN,
+        callbackUrl: e.APP_ORIGIN + "/api/auth/github/callback",
+        local: local(r, e),
+      },
+    });
   }
   if (path === "/api/usage" && method === "GET")
     return json({
@@ -149,11 +162,10 @@ async function route(r: Request, e: AppEnv): Promise<Response> {
     });
   if (path === "/api/auth/github/start" && method === "GET") {
     if (!e.GITHUB_CLIENT_ID || !e.GITHUB_CLIENT_SECRET || !e.ENCRYPTION_KEY)
-      throw new AppError(
-        503,
-        "OAUTH_SETUP",
-        "Create a GitHub OAuth App and configure the Worker secrets using the setup guide.",
-      );
+      return new Response(null, {
+        status: 302,
+        headers: { Location: e.APP_ORIGIN + "/?oauth=setup#connections" },
+      });
     const state = crypto.randomUUID(),
       verifier = crypto.randomUUID() + crypto.randomUUID();
     await e.DB.prepare("DELETE FROM oauth_states WHERE expires_at<?")

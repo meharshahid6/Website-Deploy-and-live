@@ -104,6 +104,52 @@ const request = (
     }),
     env,
   );
+it("accepts same-origin local Worker requests without trusting other ports", async () => {
+  const send = (url: string, requestOrigin: string) =>
+    worker.fetch(
+      new Request(url + "/api/projects", {
+        method: "POST",
+        headers: {
+          Origin: requestOrigin,
+          "X-LaunchDock": "1",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "origin-site",
+          repository_name: "origin-site",
+          framework_type: "static",
+        }),
+      }),
+      env,
+    );
+  expect(
+    (await send("http://127.0.0.1:8787", "http://127.0.0.1:8787")).status,
+  ).toBe(201);
+  expect(
+    (await send("http://127.0.0.1:8787", "http://127.0.0.1:9000")).status,
+  ).toBe(403);
+  expect(
+    (await send("http://127.0.0.1:8787", "https://evil.example")).status,
+  ).toBe(403);
+  expect(fetch).not.toHaveBeenCalled();
+});
+it("shows missing OAuth setup without exposing secrets or navigating to a JSON error", async () => {
+  env.GITHUB_CLIENT_SECRET = "";
+  const setup = (await (await request("/api/connections")).json()) as {
+    data: { setup: { githubReady: boolean; callbackUrl: string } };
+  };
+  expect(setup.data.setup).toMatchObject({
+    githubReady: false,
+    callbackUrl: origin + "/api/auth/github/callback",
+  });
+  expect(JSON.stringify(setup)).not.toContain("client-secret");
+  const start = await request("/api/auth/github/start");
+  expect(start.status).toBe(302);
+  expect(start.headers.get("Location")).toBe(
+    origin + "/?oauth=setup#connections",
+  );
+  expect(fetch).not.toHaveBeenCalled();
+});
 it("migrates all tables, foreign keys and constraints", () => {
   expect(
     db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(),

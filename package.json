@@ -21,7 +21,8 @@
     "deploy": "npm run deploy:check && npm run typecheck && npm run build && wrangler deploy",
     "check": "npm run typecheck && npm test && npm run build",
     "format": "prettier --write src worker shared tests scripts docs README.md",
-    "dev:init": "node scripts/local-init.mjs"
+    "dev:init": "node scripts/local-init.mjs",
+    "setup:github": "node scripts/setup-github.mjs"
   },
   "keywords": [],
   "author": "",

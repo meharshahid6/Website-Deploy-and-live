@@ -875,6 +875,21 @@ function Connections({
   refresh: () => Promise<void>;
   run: (fn: () => Promise<void>) => Promise<void>;
 }) {
+  const [setup, setSetup] = useState<{
+    githubReady: boolean;
+    appOrigin: string;
+    callbackUrl: string;
+    local: boolean;
+  } | null>(null);
+  async function checkSetup() {
+    const result = await api<{ setup: NonNullable<typeof setup> }>(
+      "/connections",
+    );
+    setSetup(result.setup);
+  }
+  useEffect(() => {
+    void run(checkSetup);
+  }, []);
   const [tokens, setTokens] = useState({ cloudflare: "", hostinger: "" }),
     [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]),
     [account, setAccount] = useState(""),
@@ -961,10 +976,62 @@ function Connections({
                     permits access to other repositories; connect only your
                     personal account. Workflows are blocked on import.
                   </p>
-                  <a className="button primary" href="/api/auth/github/start">
-                    {c ? "Reconnect GitHub" : "Authorize GitHub"}
-                    <ArrowUpRight size={16} />
-                  </a>
+                  {setup?.githubReady ? (
+                    <a className="button primary" href="/api/auth/github/start">
+                      {c ? "Reconnect GitHub" : "Authorize GitHub"}
+                      <ArrowUpRight size={16} />
+                    </a>
+                  ) : (
+                    <div className="manual-guide">
+                      <h3>One-time GitHub setup required</h3>
+                      <p>
+                        Signing in alone cannot connect this app. First register
+                        LaunchDock as a GitHub OAuth App.
+                      </p>
+                      <ol>
+                        <li>
+                          <Link url="https://github.com/settings/applications/new">
+                            Register GitHub OAuth App
+                          </Link>
+                        </li>
+                        <li>
+                          Name: <strong>LaunchDock Personal</strong>
+                        </li>
+                        <li>
+                          Homepage URL:{" "}
+                          <code>{setup?.appOrigin ?? "Checking…"}</code>
+                        </li>
+                        <li>
+                          Authorization callback URL:{" "}
+                          <code style={{ overflowWrap: "anywhere" }}>
+                            {setup?.callbackUrl ?? "Checking…"}
+                          </code>
+                        </li>
+                        <li>
+                          {setup?.local ? (
+                            <>
+                              In this project's PowerShell terminal run{" "}
+                              <code>npm run setup:github</code>. Enter the
+                              Client ID and Client Secret only in its prompts,
+                              then restart <code>npm run dev</code>.
+                            </>
+                          ) : (
+                            <>
+                              Store GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET
+                              through Wrangler secret prompts. Never enter the
+                              secret in chat.
+                            </>
+                          )}
+                        </li>
+                      </ol>
+                      <Button onClick={() => void run(checkSetup)}>
+                        Check GitHub setup
+                      </Button>
+                      <Button disabled>
+                        Authorize GitHub — setup required
+                      </Button>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -985,7 +1052,23 @@ function Connections({
                   </Field>
                   {provider === "cloudflare" ? (
                     <>
-                      <details>
+                      <div className="manual-guide">
+                        <h3>Create a scoped user token</h3>
+                        <p>
+                          Open the token page below, then choose{" "}
+                          <strong>
+                            Create Token → Create Custom Token → Get started
+                          </strong>
+                          . Name it LaunchDock. Do not use Global API Key or
+                          Account API Token with this form.
+                        </p>
+                        <p>
+                          Select your intended account under Account Resources.
+                          After reviewing permissions, choose Continue to
+                          summary → Create Token, then paste the token here.
+                        </p>
+                      </div>
+                      <details open>
                         <summary>Required Cloudflare permissions</summary>
                         <ul>
                           <li>

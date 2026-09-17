@@ -56,11 +56,19 @@ export async function authorize(r: Request, e: AppEnv) {
 }
 export function csrf(r: Request, e: AppEnv) {
   if (!["GET", "HEAD", "OPTIONS"].includes(r.method)) {
+    // The local Worker also serves built assets on 8787. Accept only that
+    // exact same origin, not arbitrary localhost ports or external origins.
+    const sameLocalOrigin =
+      local(r, e) && r.headers.get("Origin") === new URL(r.url).origin;
     if (
-      r.headers.get("Origin") !== e.APP_ORIGIN ||
+      (r.headers.get("Origin") !== e.APP_ORIGIN && !sameLocalOrigin) ||
       r.headers.get("X-LaunchDock") !== "1"
     )
-      throw new AppError(403, "CSRF", "Request origin could not be verified.");
+      throw new AppError(
+        403,
+        "CSRF",
+        "Request origin could not be verified. Open the dashboard at its configured address and try again.",
+      );
   }
 }
 export async function jsonBody(r: Request) {

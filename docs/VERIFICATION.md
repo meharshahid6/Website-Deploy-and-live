@@ -1,13 +1,13 @@
 # Verification record
 
-Last checked: 2026-09-16. This records evidence, not a claim of completed live acceptance.
+Last checked: 2026-09-17. This records evidence, not a claim of completed live acceptance.
 
 ## Local implementation verification
 
 | Check                           | Result                                                                                                                                            |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Strict TypeScript check         | Passed                                                                                                                                            |
-| Vitest unit/integration suite   | 101 tests passed in 7 files                                                                                                                       |
+| Vitest unit/integration suite   | 103 tests passed in 7 files                                                                                                                       |
 | Frontend production build       | Passed; Monaco is loaded on demand with local workers                                                                                             |
 | Worker production bundle        | Wrangler dry-run passed; approximately 1 MiB uncompressed                                                                                         |
 | D1 migrations                   | Applied successfully to local Wrangler D1; SQL constraints also verified in SQLite tests                                                          |
@@ -61,3 +61,7 @@ Do not mark this acceptance checklist complete based on mocks. In particular, in
 - Remaining account-wide free allowance: unavailable before authenticated account verification. The dashboard's local build count is not an account-wide meter.
 
 See [DEPLOYMENT.md](DEPLOYMENT.md) and [CONNECTIONS.md](CONNECTIONS.md) for exact setup instructions. Never put a credential in this file.
+
+## Connection setup regression checks (2026-09-17)
+
+103 unit/integration tests and all 10 desktop/mobile browser tests pass. Fixed same-origin local forms on port 8787 while preserving production CSRF checks. Missing GitHub OAuth setup now returns to an inline setup guide; the secret-entry helper writes only ignored local configuration. Cloudflare token instructions are visible by default. No real account connection is claimed without provider verification.
